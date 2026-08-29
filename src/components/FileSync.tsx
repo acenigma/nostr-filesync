@@ -1,19 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import * as nostr from '../services/nostr';
-import * as filesync from '../services/filesync';
-import * as uploadState from '../services/uploadState';
-import type { FileHeaders, FileRecord, DownloadProgress } from '../services/filesync';
+import { useState, useMemo } from 'react';
+import type { FileHeaders, FileRecord } from '../services/filesync';
 import Thumbnail from './Thumbnail';
-import { useAbort } from '../hooks/useAbort';
+import PreviewModal from './PreviewModal';
+import { useFileSync } from '../hooks/useFileSync';
+import { useT } from '../hooks/useT';
 import './FileSync.css';
 
 type ViewMode = 'tree' | 'flat';
-
-interface ProgressState {
-  name: string;
-  current: number;
-  total: number;
-}
 
 interface FolderNode {
   path: string;
@@ -23,162 +16,71 @@ interface FolderNode {
   fileCount: number;
 }
 
-export default function FileSync() {
-  const [files, setFiles] = useState<(FileRecord | FileHeaders)[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState<ProgressState | null>(null);
-  const [downloading, setDownloading] = useState<ProgressState | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
+interface FileSyncProps {
+  onProgress?: (p: { pct: number; label: string } | null) => void;
+}
+
+export default function FileSync({ onProgress }: FileSyncProps = {}) {
+  const {
+    files,
+    loading,
+    uploading,
+    downloading,
+    error,
+    dedupNotice,
+    pendingUploads,
+    setError,
+    handleFiles,
+    onDownload,
+    onDelete,
+    onResume,
+    onClearPending,
+  } = useFileSync({ onProgress });
+  const { t } = useT();
+
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set(['']));
   const [uploadPath, setUploadPath] = useState('');
-  const [pendingUploads, setPendingUploads] = useState<uploadState.UploadState[]>([]);
-  const [dedupNotice, setDedupNotice] = useState<string | null>(null);
-  const mountedRef = useRef(true);
-  const operationAbort = useAbort();
+  const [previewIdx, setPreviewIdx] = useState<number | null>(null);
 
-  const refresh = useCallback(async () => {
-    const keys = nostr.getKeys();
-    if (!keys.publicKey) return;
-    const local = await filesync.loadFilesWithFallback();
-    let remote: FileHeaders[] = [];
-    try {
-      remote = await filesync.fetchFileHeaders(keys.publicKey);
-    } catch (e) {
-      console.warn('Falha ao buscar arquivos remotos', e);
-    }
-    if (!mountedRef.current) return;
-    const merged = mergeFiles(local, remote);
-    setFiles(merged);
-  }, []);
-
-  const refreshPending = useCallback(async () => {
-    const list = await uploadState.listAllUploads();
-    if (mountedRef.current) setPendingUploads(list);
-  }, []);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    const init = async () => {
-      filesync.bindNostr(nostr);
-      await refresh();
-      await refreshPending();
-      if (mountedRef.current) setLoading(false);
-    };
-    init();
-
-    const keys = nostr.getKeys();
-    const closeSub = keys.publicKey
-      ? filesync.subscribeToFileHeaders(keys.publicKey, () => {
-          refresh();
-        })
-      : () => {};
-
-    const interval = setInterval(refreshPending, 3000);
-
-    return () => {
-      mountedRef.current = false;
-      closeSub();
-      clearInterval(interval);
-    };
-  }, [refresh, refreshPending]);
-
-  const handleFiles = async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
-    setError(null);
-    setDedupNotice(null);
-    for (const file of Array.from(fileList)) {
-      if (operationAbort.signal.aborted) return;
-      setUploading({ name: file.name, current: 0, total: 1 });
-      try {
-        const result = await filesync.publishFile(
-          file,
-          { path: uploadPath },
-          (p: DownloadProgress) => {
-            if (mountedRef.current) {
-              setUploading({ name: file.name, current: p.current, total: p.total });
-            }
-          },
-          operationAbort.signal
-        );
-        if (result.deduplicated) {
-          setDedupNotice(`"${file.name}" já existe — referência criada`);
-          setTimeout(() => setDedupNotice(null), 3000);
-        }
-        await refresh();
-        await refreshPending();
-      } catch (e) {
-        if ((e as Error).name === 'AbortError') return;
-        console.error('Falha ao enviar arquivo', e);
-        setError(`Falha ao enviar ${file.name}: ${(e as Error).message}`);
-      }
-    }
-    setUploading(null);
-  };
+  const previewable = useMemo(() => {
+    const list = files.filter(
+      (f) => f.type && (f.type.startsWith('image/') || f.type.startsWith('video/'))
+    );
+    return list;
+  }, [files]);
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFiles(e.target.files);
+    void handleFiles(e.target.files, uploadPath);
     e.target.value = '';
   };
 
-  const onDrop = (e: React.DragEvent) => {
+  const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
-    setDragOver(false);
-    handleFiles(e.dataTransfer.files);
-  };
-
-  const onDownload = async (file: FileRecord | FileHeaders) => {
-    setError(null);
-    setDownloading({ name: file.name, current: 0, total: file.chunks });
-    try {
-      const blob = await filesync.downloadFile(
-        file as FileHeaders,
-        (p: DownloadProgress) => {
-          if (mountedRef.current) {
-            setDownloading({ name: file.name, current: p.current, total: p.total });
-          }
-        },
-        operationAbort.signal
-      );
-      filesync.triggerDownload(blob, file.name);
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') return;
-      console.error('Falha ao baixar', e);
-      setError(`Falha ao baixar ${file.name}: ${(e as Error).message}`);
-    } finally {
-      setDownloading(null);
+    const items = e.dataTransfer.items;
+    const files: File[] = [];
+    if (items && items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind !== 'file') continue;
+        const entry =
+          typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+        if (entry) {
+          await collectFromEntry(entry, '', files);
+        } else {
+          const f = item.getAsFile();
+          if (f) files.push(f);
+        }
+      }
+      if (files.length > 0) {
+        const dt = new DataTransfer();
+        for (const f of files) dt.items.add(f);
+        await handleFiles(dt.files, uploadPath);
+        return;
+      }
     }
-  };
-
-  const onDelete = async (file: FileRecord | FileHeaders) => {
-    if (!confirm(`Excluir ${file.name}? Isso também remove dos relays.`)) return;
-    setError(null);
-    try {
-      await filesync.deleteRemoteFile(file as FileHeaders);
-      await filesync.deleteLocalFile(file.fileId);
-      await refresh();
-    } catch (e) {
-      console.error('Falha ao excluir', e);
-      setError(`Falha ao excluir: ${(e as Error).message}`);
-    }
-  };
-
-  const onResume = async () => {
-    const results = await filesync.resumePendingUploads();
-    await refreshPending();
-    const completed = results.filter((r) => r.ok && r.result?.status === 'complete').length;
-    const removed = results.filter((r) => r.ok && r.result?.status === 'incomplete').length;
-    setError(
-      `Retomada: ${completed} completo(s), ${removed} removido(s) por incompletude`
-    );
-  };
-
-  const onClearPending = async () => {
-    if (!confirm('Limpar todos os estados de upload pendentes?')) return;
-    await uploadState.clearAllUploadStates();
-    await refreshPending();
+    await handleFiles(e.dataTransfer.files, uploadPath);
   };
 
   const filteredFiles = useMemo(() => {
@@ -227,27 +129,24 @@ export default function FileSync() {
       </div>
 
       <div
-        className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
+        className={`drop-zone`}
+        onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
       >
-        <p>Arraste arquivos aqui ou</p>
+        <p>{t('upload_dropzone')}</p>
         <label className="upload-btn">
-          escolher arquivos
+          {t('upload_choose')}
           <input
             type="file"
             multiple
+            // @ts-expect-error webkitdirectory é não-padrão mas amplamente suportado
+            webkitdirectory=""
+            directory=""
             onChange={onInputChange}
             style={{ display: 'none' }}
           />
         </label>
-        <p className="hint">
-          Criptografados (AES-256-GCM) + comprimidos (gzip) antes de enviar
-        </p>
+        <p className="hint">{t('upload_hint')}</p>
       </div>
 
       {dedupNotice && <div className="dedup-notice">♻ {dedupNotice}</div>}
@@ -255,7 +154,9 @@ export default function FileSync() {
       {uploading && (
         <div className="progress-card">
           <div className="progress-info">
-            <span>Enviando: {uploading.name}</span>
+            <span>
+              {t('sending')}: {uploading.name}
+            </span>
             <span>
               {uploading.current} / {uploading.total}
             </span>
@@ -272,7 +173,9 @@ export default function FileSync() {
       {downloading && (
         <div className="progress-card">
           <div className="progress-info">
-            <span>Baixando: {downloading.name}</span>
+            <span>
+              {t('downloading')}: {downloading.name}
+            </span>
             <span>
               {downloading.current} / {downloading.total}
             </span>
@@ -286,19 +189,23 @@ export default function FileSync() {
         </div>
       )}
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner" onClick={() => setError(null)} role="button" tabIndex={0}>
+          {error}
+        </div>
+      )}
 
       {pendingUploads.length > 0 && (
         <div className="pending-banner">
           <div className="pending-text">
-            <strong>{pendingUploads.length}</strong> upload(s) em background
+            <strong>{pendingUploads.length}</strong> {t('pending_uploads')}
           </div>
           <div className="pending-actions">
-            <button className="text-btn" onClick={onResume}>
-              Verificar
+            <button className="text-btn" onClick={() => void onResume()}>
+              {t('action_check')}
             </button>
-            <button className="text-btn danger" onClick={onClearPending}>
-              Limpar
+            <button className="text-btn danger" onClick={() => void onClearPending()}>
+              {t('action_clear')}
             </button>
           </div>
         </div>
@@ -310,20 +217,20 @@ export default function FileSync() {
           className="search-input"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="🔍 Buscar por nome ou pasta..."
+          placeholder={t('search_placeholder')}
         />
         <div className="view-toggle">
           <button
             className={`view-btn ${viewMode === 'tree' ? 'active' : ''}`}
             onClick={() => setViewMode('tree')}
-            title="Árvore"
+            title="Tree"
           >
             🌳
           </button>
           <button
             className={`view-btn ${viewMode === 'flat' ? 'active' : ''}`}
             onClick={() => setViewMode('flat')}
-            title="Lista plana"
+            title="Flat list"
           >
             ☰
           </button>
@@ -337,12 +244,31 @@ export default function FileSync() {
           onToggle={toggleFolder}
           onDownload={onDownload}
           onDelete={onDelete}
+          onPreview={(file) => {
+            const idx = previewable.findIndex((f) => f.fileId === file.fileId);
+            if (idx >= 0) setPreviewIdx(idx);
+          }}
         />
       ) : (
         <FlatList
           files={filteredFiles}
           onDownload={onDownload}
           onDelete={onDelete}
+          onPreview={(file) => {
+            const idx = previewable.findIndex((f) => f.fileId === file.fileId);
+            if (idx >= 0) setPreviewIdx(idx);
+          }}
+        />
+      )}
+
+      {previewIdx !== null && previewable[previewIdx] && (
+        <PreviewModal
+          file={previewable[previewIdx] as FileHeaders}
+          onClose={() => setPreviewIdx(null)}
+          onPrev={previewIdx > 0 ? () => setPreviewIdx(previewIdx - 1) : null}
+          onNext={
+            previewIdx < previewable.length - 1 ? () => setPreviewIdx(previewIdx + 1) : null
+          }
         />
       )}
     </div>
@@ -355,13 +281,15 @@ interface TreeViewProps {
   onToggle: (path: string) => void;
   onDownload: (f: FileRecord | FileHeaders) => void;
   onDelete: (f: FileRecord | FileHeaders) => void;
+  onPreview: (f: FileRecord | FileHeaders) => void;
 }
 
-function TreeView({ tree, expanded, onToggle, onDownload, onDelete }: TreeViewProps) {
+function TreeView({ tree, expanded, onToggle, onDownload, onDelete, onPreview }: TreeViewProps) {
+  const { t } = useT();
   if (!tree.folders.length && !tree.files.length) {
     return (
       <ul className="file-list">
-        <li className="empty-state">Nenhum arquivo sincronizado ainda.</li>
+        <li className="empty-state">{t('empty_files')}</li>
       </ul>
     );
   }
@@ -374,7 +302,7 @@ function TreeView({ tree, expanded, onToggle, onDownload, onDelete }: TreeViewPr
           <li key={`folder-${folder.path}`} className="folder-item">
             <button className="folder-row" onClick={() => onToggle(folder.path)}>
               <span className="folder-icon">{isOpen ? '📂' : '📁'}</span>
-              <span className="folder-name">{folder.path || '/'}</span>
+              <span className="folder-name">{folder.path || t('folder_root')}</span>
               <span className="folder-count">{folder.fileCount + folder.folderCount}</span>
             </button>
             {isOpen && (
@@ -385,6 +313,7 @@ function TreeView({ tree, expanded, onToggle, onDownload, onDelete }: TreeViewPr
                   onToggle={onToggle}
                   onDownload={onDownload}
                   onDelete={onDelete}
+                  onPreview={onPreview}
                 />
               </div>
             )}
@@ -392,7 +321,13 @@ function TreeView({ tree, expanded, onToggle, onDownload, onDelete }: TreeViewPr
         );
       })}
       {tree.files.map((file) => (
-        <FileRow key={file.fileId} file={file} onDownload={onDownload} onDelete={onDelete} />
+        <FileRow
+          key={file.fileId}
+          file={file}
+          onDownload={onDownload}
+          onDelete={onDelete}
+          onPreview={onPreview}
+        />
       ))}
     </ul>
   );
@@ -402,20 +337,28 @@ interface FlatListProps {
   files: (FileRecord | FileHeaders)[];
   onDownload: (f: FileRecord | FileHeaders) => void;
   onDelete: (f: FileRecord | FileHeaders) => void;
+  onPreview: (f: FileRecord | FileHeaders) => void;
 }
 
-function FlatList({ files, onDownload, onDelete }: FlatListProps) {
+function FlatList({ files, onDownload, onDelete, onPreview }: FlatListProps) {
+  const { t } = useT();
   if (!files.length) {
     return (
       <ul className="file-list">
-        <li className="empty-state">Nenhum arquivo sincronizado ainda.</li>
+        <li className="empty-state">{t('empty_files')}</li>
       </ul>
     );
   }
   return (
     <ul className="file-list">
       {files.map((file) => (
-        <FileRow key={file.fileId} file={file} onDownload={onDownload} onDelete={onDelete} />
+        <FileRow
+          key={file.fileId}
+          file={file}
+          onDownload={onDownload}
+          onDelete={onDelete}
+          onPreview={onPreview}
+        />
       ))}
     </ul>
   );
@@ -425,34 +368,60 @@ interface FileRowProps {
   file: FileRecord | FileHeaders;
   onDownload: (f: FileRecord | FileHeaders) => void;
   onDelete: (f: FileRecord | FileHeaders) => void;
+  onPreview: (f: FileRecord | FileHeaders) => void;
 }
 
-function FileRow({ file, onDownload, onDelete }: FileRowProps) {
+function FileRow({ file, onDownload, onDelete, onPreview }: FileRowProps) {
+  const { t } = useT();
+  const isPreviewable =
+    !!file.type && (file.type.startsWith('image/') || file.type.startsWith('video/'));
   return (
     <li className="file-item">
-      <Thumbnail file={file as FileHeaders} />
+      <button
+        className="thumb-button"
+        onClick={() => isPreviewable && onPreview(file)}
+        disabled={!isPreviewable}
+        aria-label={isPreviewable ? `Preview ${file.name}` : file.name}
+      >
+        <Thumbnail file={file as FileHeaders} />
+      </button>
       <div className="file-info">
         <div className="file-name" title={file.name}>
           {file.name}
         </div>
         <div className="file-meta">
           {file.path && <span className="file-path">{file.path}/</span>}
-          {filesync.formatBytes(file.size)} · {file.status === 'uploaded' ? 'enviado' : 'remoto'}
+          {filesync_formatBytes(file.size)} · {file.status === 'uploaded' ? '✓' : '☁'}
           {file.compression === 'gzip' && ' · gzip'}
           {' · '}
           {new Date(file.createdAt * 1000).toLocaleString()}
         </div>
       </div>
       <div className="file-actions">
-        <button className="action-btn download" onClick={() => onDownload(file)}>
+        <button
+          className="action-btn download"
+          onClick={() => onDownload(file)}
+          title={t('downloading')}
+        >
           ⬇
         </button>
-        <button className="action-btn delete" onClick={() => onDelete(file)}>
+        <button
+          className="action-btn delete"
+          onClick={() => onDelete(file)}
+          title={t('delete_confirm').replace('{name}', file.name)}
+        >
           🗑
         </button>
       </div>
     </li>
   );
+}
+
+function filesync_formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function buildTree(files: (FileRecord | FileHeaders)[]): FolderNode {
@@ -501,16 +470,44 @@ function buildTree(files: (FileRecord | FileHeaders)[]): FolderNode {
   return root;
 }
 
-function mergeFiles(local: FileRecord[], remote: FileHeaders[]): (FileRecord | FileHeaders)[] {
-  const byId = new Map<string, FileRecord | FileHeaders>();
-  for (const r of remote) byId.set(r.fileId, r);
-  for (const l of local) {
-    const existing = byId.get(l.fileId);
-    if (!existing) {
-      byId.set(l.fileId, l);
-    } else {
-      byId.set(l.fileId, { ...existing, ...l, status: 'uploaded' });
+interface FsEntryLike {
+  isFile: boolean;
+  isDirectory: boolean;
+  name: string;
+  fullPath: string;
+  file?: (cb: (f: File) => void, err: (e: unknown) => void) => void;
+  createReader?: () => {
+    readEntries: (cb: (entries: FsEntryLike[]) => void, err: (e: unknown) => void) => void;
+  };
+}
+
+async function collectFromEntry(
+  entry: FsEntryLike,
+  prefix: string,
+  out: File[]
+): Promise<void> {
+  if (entry.isFile && entry.file) {
+    const file = await new Promise<File>((resolve, reject) => {
+      entry.file!(resolve, reject);
+    });
+    const path = prefix;
+    if (path) {
+      Object.defineProperty(file, 'webkitRelativePath', {
+        value: path + '/' + entry.name,
+        configurable: true,
+      });
+    }
+    out.push(file);
+    return;
+  }
+  if (entry.isDirectory && entry.createReader) {
+    const reader = entry.createReader();
+    const children = await new Promise<FsEntryLike[]>((resolve, reject) => {
+      reader.readEntries(resolve, reject);
+    });
+    const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
+    for (const child of children) {
+      await collectFromEntry(child, nextPrefix, out);
     }
   }
-  return Array.from(byId.values()).sort((a, b) => b.createdAt - a.createdAt);
 }

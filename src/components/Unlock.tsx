@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import * as nostr from '../services/nostr';
 import QRScanner from './QRScanner';
 import MnemonicSetup from './MnemonicSetup';
+import { useT } from '../hooks/useT';
 import './Unlock.css';
 
 type Mode = 'loading' | 'setup' | 'locked' | 'migrate' | 'import' | 'unlocked';
@@ -27,6 +28,9 @@ export default function Unlock() {
   const [unlockTab, setUnlockTab] = useState<UnlockTab>('password');
   const [mnemonicInput, setMnemonicInput] = useState('');
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  const { t } = useT();
+  const tRef = useMemo(() => ({ current: t }), [t]);
+  const formatLabel = useMemo(() => formatLabelWith(t), [t]);
 
   useEffect(() => {
     const unsub = nostr.onAuthChange((s) => {
@@ -45,12 +49,12 @@ export default function Unlock() {
   );
 
   function validatePasswordPair(password: string, confirm: string): string | null {
-  if (password.length < 6) return 'Senha deve ter pelo menos 6 caracteres';
-  if (password !== confirm) return 'As senhas não coincidem';
-  return null;
-}
+    if (password.length < 6) return tRef.current('unlock_pw_short');
+    if (password !== confirm) return tRef.current('unlock_pw_mismatch');
+    return null;
+  }
 
-const handleCreate = async (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const pwError = validatePasswordPair(password, confirmPassword);
@@ -64,7 +68,7 @@ const handleCreate = async (e: React.FormEvent) => {
       setInfo({ npub: result.npub });
       setCreatedMnemonic(result.mnemonic || null);
     } catch {
-      setError('Falha ao criar identidade');
+      setError(tRef.current('unlock_create_failed'));
     } finally {
       setBusy(false);
     }
@@ -75,14 +79,14 @@ const handleCreate = async (e: React.FormEvent) => {
     setError(null);
     const phrase = mnemonicInput.trim();
     if (!nostr.isValidMnemonic(phrase)) {
-      setError('Frase inválida — verifique as 12 palavras e o checksum');
+      setError(tRef.current('unlock_mnemonic_invalid'));
       return;
     }
     setBusy(true);
     try {
       await nostr.unlockWithMnemonic(phrase);
     } catch (e) {
-      setError((e as Error).message || 'Frase não corresponde a esta identidade');
+      setError((e as Error).message || tRef.current('unlock_mnemonic_nomatch'));
     } finally {
       setBusy(false);
     }
@@ -95,7 +99,7 @@ const handleCreate = async (e: React.FormEvent) => {
     try {
       await nostr.unlockWithPassword(password);
     } catch {
-      setError('Senha incorreta ou credencial corrompida');
+      setError(tRef.current('unlock_unlock_failed'));
     } finally {
       setBusy(false);
     }
@@ -128,7 +132,7 @@ const handleCreate = async (e: React.FormEvent) => {
       return;
     }
     if (detectedFormat === 'ncryptsec' && !currentPassword) {
-      setError('Esta chave está criptografada — informe a senha original');
+      setError(tRef.current('unlock_import_needs_currpw'));
       return;
     }
     if (nostr.hasStoredCredential() && !confirmOverwrite) {
@@ -169,7 +173,7 @@ const handleCreate = async (e: React.FormEvent) => {
   };
 
   if (mode === 'loading') {
-    return <div className="unlock-screen">Carregando...</div>;
+    return <div className="unlock-screen">{t('unlock_loading')}</div>;
   }
 
   if (mode === 'unlocked') {
@@ -179,7 +183,7 @@ const handleCreate = async (e: React.FormEvent) => {
   return (
     <div className="unlock-screen">
       <div className="unlock-card">
-        <h1>🔐 Nostr FileSync</h1>
+        <h1>{t('unlock_setup_title')}</h1>
 
         {mode === 'setup' && createdMnemonic && (
           <MnemonicSetup
@@ -190,36 +194,33 @@ const handleCreate = async (e: React.FormEvent) => {
 
         {mode === 'setup' && !createdMnemonic && (
           <>
-            <p className="unlock-subtitle">Bem-vindo! Crie sua identidade Nostr local.</p>
-            <div className="setup-info-banner">
-              🔑 Ao criar, você receberá <strong>12 palavras de recuperação</strong> (BIP-39).
-              Anote-as — são a única forma de recuperar a conta se esquecer a senha.
-            </div>
+            <p className="unlock-subtitle">{t('unlock_setup_subtitle')}</p>
+            <div className="setup-info-banner">{t('unlock_setup_banner')}</div>
             <form onSubmit={handleCreate} className="unlock-form">
-              <label>Senha (criptografa sua chave localmente)</label>
+              <label>{t('unlock_password_label')}</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
+                placeholder={t('unlock_password_placeholder')}
                 autoComplete="new-password"
                 disabled={busy}
               />
-              <label>Confirme a senha</label>
+              <label>{t('unlock_confirm_label')}</label>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repita a senha"
+                placeholder={t('unlock_confirm_placeholder')}
                 autoComplete="new-password"
                 disabled={busy}
               />
               {error && <div className="unlock-error">{error}</div>}
               <button type="submit" className="unlock-btn" disabled={busy}>
-                {busy ? 'Criando...' : 'Criar identidade'}
+                {busy ? t('unlock_creating') : t('unlock_create')}
               </button>
             </form>
-            <div className="unlock-divider">ou</div>
+            <div className="unlock-divider">{t('unlock_or')}</div>
             <button
               className="unlock-link-btn"
               onClick={() => {
@@ -227,12 +228,12 @@ const handleCreate = async (e: React.FormEvent) => {
                 setError(null);
               }}
             >
-              Importar chave existente
+              {t('unlock_import_link')}
             </button>
             {info && !createdMnemonic && (
               <div className="unlock-info">
-                <strong>Identidade criada!</strong>
-                <p>Sua chave pública (anote para referência):</p>
+                <strong>{t('unlock_info_created')}</strong>
+                <p>{t('unlock_info_pubkey')}</p>
                 <code>{info.npub}</code>
               </div>
             )}
@@ -241,7 +242,7 @@ const handleCreate = async (e: React.FormEvent) => {
 
         {mode === 'locked' && (
           <>
-            <p className="unlock-subtitle">Desbloqueie sua identidade</p>
+            <p className="unlock-subtitle">{t('unlock_locked_subtitle')}</p>
             <div className="tab-bar">
               <button
                 className={`tab-btn ${unlockTab === 'password' ? 'active' : ''}`}
@@ -250,7 +251,7 @@ const handleCreate = async (e: React.FormEvent) => {
                   setError(null);
                 }}
               >
-                Senha
+                {t('unlock_tab_password')}
               </button>
               <button
                 className={`tab-btn ${unlockTab === 'mnemonic' ? 'active' : ''}`}
@@ -259,29 +260,28 @@ const handleCreate = async (e: React.FormEvent) => {
                   setError(null);
                 }}
               >
-                Frase de 12 palavras
+                {t('unlock_tab_mnemonic')}
               </button>
             </div>
             {unlockTab === 'password' ? (
               <form onSubmit={handleUnlock} className="unlock-form">
-                <label>Senha</label>
+                <label>{t('unlock_tab_password')}</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Sua senha"
+                  placeholder={t('unlock_password_only_placeholder')}
                   autoComplete="current-password"
                   autoFocus
                   disabled={busy}
                 />
                 {error && <div className="unlock-error">{error}</div>}
                 <button type="submit" className="unlock-btn" disabled={busy}>
-                  {busy ? 'Desbloqueando...' : 'Desbloquear'}
+                  {busy ? t('unlock_unlocking') : t('unlock_unlock')}
                 </button>
               </form>
             ) : (
               <form onSubmit={handleUnlockMnemonic} className="unlock-form">
-                <label>Cole as 12 palavras separadas por espaço</label>
                 <textarea
                   value={mnemonicInput}
                   onChange={(e) => setMnemonicInput(e.target.value)}
@@ -297,11 +297,11 @@ const handleCreate = async (e: React.FormEvent) => {
                   className="unlock-btn"
                   disabled={busy || !nostr.isValidMnemonic(mnemonicInput)}
                 >
-                  {busy ? 'Desbloqueando...' : 'Desbloquear com frase'}
+                  {busy ? t('unlock_unlocking') : t('unlock_unlock_with_phrase')}
                 </button>
               </form>
             )}
-            <div className="unlock-divider">ou</div>
+            <div className="unlock-divider">{t('unlock_or')}</div>
             <button
               className="unlock-link-btn"
               onClick={() => {
@@ -309,50 +309,48 @@ const handleCreate = async (e: React.FormEvent) => {
                 resetImport();
               }}
             >
-              Importar outra chave
+              {t('unlock_import_other')}
             </button>
             <button
               className="unlock-link-btn danger"
               onClick={() => {
-                if (confirm('Isso vai apagar sua identidade atual e gerar uma nova. Continuar?')) {
+                if (confirm(t('unlock_reset_confirm'))) {
                   localStorage.removeItem('nostr_todo_privkey');
                   localStorage.removeItem('nostr_todo_mnemonic_hint');
                   window.location.reload();
                 }
               }}
             >
-              Esqueci tudo (resetar)
+              {t('unlock_reset')}
             </button>
           </>
         )}
 
         {mode === 'migrate' && (
           <>
-            <p className="unlock-subtitle">
-              Sua chave está salva sem criptografia. Defina uma senha para protegê-la.
-            </p>
+            <p className="unlock-subtitle">{t('unlock_migrate_subtitle')}</p>
             <form onSubmit={handleMigrate} className="unlock-form">
-              <label>Senha</label>
+              <label>{t('unlock_migrate_password_label')}</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
+                placeholder={t('unlock_password_placeholder')}
                 autoComplete="new-password"
                 disabled={busy}
               />
-              <label>Confirme a senha</label>
+              <label>{t('unlock_migrate_confirm_label')}</label>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repita a senha"
+                placeholder={t('unlock_confirm_placeholder')}
                 autoComplete="new-password"
                 disabled={busy}
               />
               {error && <div className="unlock-error">{error}</div>}
               <button type="submit" className="unlock-btn" disabled={busy}>
-                {busy ? 'Criptografando...' : 'Proteger com senha'}
+                {busy ? t('unlock_migrating') : t('unlock_migrate_button')}
               </button>
               <button
                 type="button"
@@ -363,7 +361,7 @@ const handleCreate = async (e: React.FormEvent) => {
                   setConfirmPassword('');
                 }}
               >
-                Cancelar
+                {t('unlock_cancel')}
               </button>
             </form>
           </>
@@ -371,25 +369,23 @@ const handleCreate = async (e: React.FormEvent) => {
 
         {mode === 'import' && (
           <>
-            <p className="unlock-subtitle">
-              Importe uma chave de outro app, device ou backup
-            </p>
+            <p className="unlock-subtitle">{t('unlock_import_subtitle')}</p>
             <form onSubmit={handleImport} className="unlock-form">
               <div className="input-with-action">
-                <label>Chave (12 palavras, nsec, ncryptsec ou hex de 64 caracteres)</label>
+                <label>{t('unlock_import_label')}</label>
                 <button
                   type="button"
                   className="qr-btn"
                   onClick={() => setShowScanner(true)}
                   disabled={busy}
                 >
-                  📷 Ler QR
+                  {t('unlock_scan_qr')}
                 </button>
               </div>
               <textarea
                 value={importInput}
                 onChange={(e) => setImportInput(e.target.value)}
-                placeholder="Cole aqui ou escaneie um QR"
+                placeholder={t('unlock_import_placeholder')}
                 rows={3}
                 disabled={busy}
                 autoFocus
@@ -400,38 +396,38 @@ const handleCreate = async (e: React.FormEvent) => {
                     {formatLabel(detectedFormat)}
                   </span>
                   {detectedFormat === 'ncryptsec' && (
-                    <span> — informe a senha original abaixo</span>
+                    <span>{t('unlock_format_with_currpw')}</span>
                   )}
                 </div>
               )}
               {detectedFormat === 'ncryptsec' && (
                 <>
-                  <label>Senha da chave original</label>
+                  <label>{t('unlock_import_current_pw_label')}</label>
                   <input
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="Senha usada para criptografar"
+                    placeholder={t('unlock_import_current_pw_placeholder')}
                     autoComplete="current-password"
                     disabled={busy}
                   />
                 </>
               )}
-              <label>Nova senha para proteger localmente</label>
+              <label>{t('unlock_import_new_pw_label')}</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
+                placeholder={t('unlock_password_placeholder')}
                 autoComplete="new-password"
                 disabled={busy}
               />
-              <label>Confirme a nova senha</label>
+              <label>{t('unlock_import_confirm_label')}</label>
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repita a senha"
+                placeholder={t('unlock_confirm_placeholder')}
                 autoComplete="new-password"
                 disabled={busy}
               />
@@ -441,7 +437,7 @@ const handleCreate = async (e: React.FormEvent) => {
                 className="unlock-btn"
                 disabled={busy || !isImportSubmittable(detectedFormat, importInput)}
               >
-                {busy ? 'Importando...' : 'Importar'}
+                {busy ? t('unlock_importing') : t('unlock_import_button')}
               </button>
               <button
                 type="button"
@@ -451,26 +447,24 @@ const handleCreate = async (e: React.FormEvent) => {
                   resetImport();
                 }}
               >
-                Voltar
+                {t('unlock_back')}
               </button>
             </form>
             {info && (
               <div className="unlock-info">
-                <strong>Importado com sucesso!</strong>
-                <p>Fonte: {formatLabel(info.source as DetectedFormat)}</p>
-                <p>Sua chave pública:</p>
+                <strong>{t('unlock_import_success')}</strong>
+                <p>
+                  {t('unlock_import_source')} {formatLabel(info.source as DetectedFormat)}
+                </p>
+                <p>{t('unlock_import_pubkey')}</p>
                 <code>{info.npub}</code>
               </div>
             )}
             {confirmOverwrite && (
               <div className="confirm-overlay" role="dialog" aria-modal="true">
                 <div className="confirm-card">
-                  <h3>Substituir identidade atual?</h3>
-                  <p>
-                    Já existe uma identidade salva neste dispositivo. Importar outra chave
-                    removerá a atual <strong>permanentemente deste dispositivo</strong> (os
-                    relays continuam com seus eventos).
-                  </p>
+                  <h3>{t('unlock_overwrite_title')}</h3>
+                  <p>{t('unlock_overwrite_body')}</p>
                   <div className="confirm-actions">
                     <button
                       type="button"
@@ -478,7 +472,7 @@ const handleCreate = async (e: React.FormEvent) => {
                       onClick={() => setConfirmOverwrite(false)}
                       disabled={busy}
                     >
-                      Cancelar
+                      {t('unlock_cancel')}
                     </button>
                     <button
                       type="button"
@@ -489,7 +483,7 @@ const handleCreate = async (e: React.FormEvent) => {
                       }}
                       disabled={busy}
                     >
-                      {busy ? 'Importando...' : 'Substituir'}
+                      {busy ? t('unlock_replace_importing') : t('unlock_replace')}
                     </button>
                   </div>
                 </div>
@@ -526,10 +520,12 @@ function isImportSubmittable(fmt: DetectedFormat | null, input: string): boolean
   return true;
 }
 
-function formatLabel(fmt: DetectedFormat | string | undefined): string {
-  if (fmt === 'nsec') return 'nsec (texto claro)';
-  if (fmt === 'ncryptsec') return 'ncryptsec (criptografada)';
-  if (fmt === 'hex') return 'hex (64 caracteres)';
-  if (fmt === 'mnemonic') return 'frase de 12 palavras';
-  return 'formato não reconhecido';
+function formatLabelWith(t: (key: import('../i18n').TranslationKey) => string) {
+  return (fmt: DetectedFormat | string | undefined): string => {
+    if (fmt === 'nsec') return t('unlock_format_nsec');
+    if (fmt === 'ncryptsec') return t('unlock_format_ncryptsec');
+    if (fmt === 'hex') return t('unlock_format_hex');
+    if (fmt === 'mnemonic') return t('unlock_format_mnemonic');
+    return t('unlock_format_invalid');
+  };
 }

@@ -1,6 +1,7 @@
 import { finalizeEvent, nip44, type EventTemplate, type NostrEvent, type SimplePool } from 'nostr-tools';
 import * as uploadState from './uploadState';
 import * as db from './db';
+import * as nip42Lib from './nip42';
 import { getRelays } from './nostr';
 
 const KIND_FILE_HEADER = 1063;
@@ -123,7 +124,7 @@ function concatBytes(arrays: Uint8Array[]): Uint8Array {
   return out;
 }
 
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
   return bytesToHex(new Uint8Array(digest));
 }
@@ -142,7 +143,7 @@ interface AesResult {
   nonce: Uint8Array;
 }
 
-async function aesGcmEncrypt(plainBytes: Uint8Array): Promise<AesResult> {
+export async function aesGcmEncrypt(plainBytes: Uint8Array): Promise<AesResult> {
   const key = crypto.getRandomValues(new Uint8Array(32));
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, ['encrypt']);
@@ -153,7 +154,7 @@ async function aesGcmEncrypt(plainBytes: Uint8Array): Promise<AesResult> {
   return { encrypted: out, key, nonce };
 }
 
-async function aesGcmDecrypt(combinedBytes: Uint8Array, keyBytes: Uint8Array): Promise<Uint8Array> {
+export async function aesGcmDecrypt(combinedBytes: Uint8Array, keyBytes: Uint8Array): Promise<Uint8Array> {
   const nonce = combinedBytes.subarray(0, 12);
   const ciphertext = combinedBytes.subarray(12);
   const cryptoKey = await crypto.subtle.importKey('raw', keyBytes as BufferSource, 'AES-GCM', false, ['decrypt']);
@@ -161,12 +162,12 @@ async function aesGcmDecrypt(combinedBytes: Uint8Array, keyBytes: Uint8Array): P
   return new Uint8Array(plain);
 }
 
-function nip44SelfWrap(keyBytes: Uint8Array, sec: Uint8Array, pub: string): string {
+export function nip44SelfWrap(keyBytes: Uint8Array, sec: Uint8Array, pub: string): string {
   const convKey = nip44.getConversationKey(sec, pub);
   return nip44.encrypt(bytesToHex(keyBytes), convKey);
 }
 
-function nip44SelfUnwrap(payload: string, sec: Uint8Array, pub: string): Uint8Array {
+export function nip44SelfUnwrap(payload: string, sec: Uint8Array, pub: string): Uint8Array {
   const convKey = nip44.getConversationKey(sec, pub);
   const hex = nip44.decrypt(payload, convKey);
   return hexToBytes(hex);
@@ -177,7 +178,7 @@ interface CompressResult {
   ratio: number;
 }
 
-async function gzipCompress(bytes: Uint8Array): Promise<CompressResult> {
+export async function gzipCompress(bytes: Uint8Array): Promise<CompressResult> {
   if (typeof CompressionStream === 'undefined') {
     return { compressed: bytes, ratio: 1 };
   }
@@ -203,7 +204,7 @@ async function gzipCompress(bytes: Uint8Array): Promise<CompressResult> {
   return { compressed: out, ratio: out.byteLength / bytes.byteLength };
 }
 
-async function gzipDecompress(bytes: Uint8Array): Promise<Uint8Array> {
+export async function gzipDecompress(bytes: Uint8Array): Promise<Uint8Array> {
   if (typeof DecompressionStream === 'undefined') {
     return bytes;
   }
@@ -601,7 +602,7 @@ export function subscribeToFileHeaders(
           sub = pool.subscribeMany(
             relays,
             { kinds: [KIND_FILE_HEADER, KIND_FILE_DELETE], authors: [pubkey] },
-            { onevent: onEvent }
+            { onevent: onEvent, onauth: nip42Lib.handleAuth }
           );
           return;
         }

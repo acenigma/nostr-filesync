@@ -1,8 +1,12 @@
 import { useState, useMemo } from 'react';
 import * as nostr from '../services/nostr';
+import * as nip46 from '../services/nip46';
 import QRCode from 'qrcode';
 import QRScanner from './QRScanner';
 import MnemonicSetup from './MnemonicSetup';
+import { useT } from '../hooks/useT';
+import { setLocale, getLocale } from '../hooks/useT';
+import { SUPPORTED_LOCALES, LOCALE_LABELS } from '../i18n';
 import './Settings.css';
 
 type DetectedFormat = 'nsec' | 'ncryptsec' | 'hex' | 'mnemonic' | 'invalid';
@@ -12,6 +16,8 @@ interface Props {
 }
 
 export default function Settings({ onClose }: Props) {
+  const { t } = useT();
+  const [locale, setLocaleState] = useState(() => getLocale());
   const [npub] = useState<string>(() => nostr.getNpub() || '');
   const [nsec] = useState<string>(() => nostr.getNsec() || '');
   const [ncryptsec] = useState<string>(() => nostr.getNcryptsec() || '');
@@ -36,6 +42,9 @@ export default function Settings({ onClose }: Props) {
   const [activeRelays, setActiveRelays] = useState<string[]>(nostr.FALLBACK_RELAY_LIST);
   const [relaySource, setRelaySource] = useState<'custom' | 'fallback'>('fallback');
   const [refreshingRelays, setRefreshingRelays] = useState(false);
+  const [bunkerInput, setBunkerInput] = useState('');
+  const [bunkerBusy, setBunkerBusy] = useState(false);
+  const [bunkerInfo, setBunkerInfo] = useState<string | null>(null);
 
   const importFormat = useMemo<DetectedFormat | null>(
     () => detectFormat(importInput),
@@ -121,6 +130,32 @@ export default function Settings({ onClose }: Props) {
     window.location.reload();
   };
 
+  const handleBunkerConnect = async () => {
+    if (!bunkerInput.trim()) return;
+    setBunkerBusy(true);
+    setError(null);
+    try {
+      const result = await nip46.connectToBunker(bunkerInput);
+      setBunkerInfo(result.npub);
+      setBunkerInput('');
+      setSuccess('Bunker conectado');
+      setTimeout(() => setSuccess(null), 2000);
+    } catch (e) {
+      setError('Falha ao conectar bunker: ' + (e as Error).message);
+    } finally {
+      setBunkerBusy(false);
+    }
+  };
+
+  const handleBunkerDisconnect = async () => {
+    const signer = nip46.getActiveRemoteSigner();
+    if (!signer) return;
+    await signer.close();
+    setBunkerInfo(null);
+    setSuccess('Bunker desconectado');
+    setTimeout(() => setSuccess(null), 2000);
+  };
+
   const handleRevealMnemonic = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -190,8 +225,12 @@ export default function Settings({ onClose }: Props) {
     <div className="settings-overlay" onClick={onClose}>
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
-          <h2>⚙ Configurações</h2>
-          <button className="settings-close" onClick={onClose} aria-label="Fechar">
+          <h2>⚙ {t('settings_title_modal')}</h2>
+          <button
+            className="settings-close"
+            onClick={onClose}
+            aria-label={t('settings_close')}
+          >
             ✕
           </button>
         </div>
@@ -200,13 +239,65 @@ export default function Settings({ onClose }: Props) {
         {success && <div className="settings-success">{success}</div>}
 
         <section className="settings-section">
-          <h3>Identidade</h3>
+          <h3>{t('settings_appearance')}</h3>
           <div className="field">
-            <label>Chave pública (npub)</label>
+            <label>{t('settings_language')}</label>
+            <select
+              className="settings-select"
+              value={locale}
+              onChange={(e) => {
+                const next = e.target.value as typeof locale;
+                setLocaleState(next);
+                setLocale(next);
+              }}
+            >
+              {SUPPORTED_LOCALES.map((l) => (
+                <option key={l} value={l}>
+                  {LOCALE_LABELS[l]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h3>Remote signer (NIP-46)</h3>
+          {bunkerInfo ? (
+            <div className="field">
+              <label>Bunker ativo</label>
+              <code className="value-mono">{bunkerInfo}</code>
+              <button className="small-btn danger" onClick={handleBunkerDisconnect}>
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <div className="field">
+              <label>bunker:// ou nostrconnect:// URL</label>
+              <div className="field-row">
+                <input
+                  className="settings-input"
+                  value={bunkerInput}
+                  onChange={(e) => setBunkerInput(e.target.value)}
+                  placeholder="bunker://npub...?relay=wss://..."
+                  spellCheck={false}
+                  disabled={bunkerBusy}
+                />
+                <button className="small-btn" onClick={handleBunkerConnect} disabled={bunkerBusy}>
+                  {bunkerBusy ? 'Connecting...' : 'Connect'}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="settings-section">
+          <h3>{t('settings_export_identity')}</h3>
+          <div className="field">
+            <label>{t('settings_pubkey')}</label>
             <div className="field-row">
               <code className="value-mono">{npub}</code>
-              <button className="small-btn" onClick={() => copy(npub, 'npub')}>
-                Copiar
+              <button className="small-btn" onClick={() => copy(npub, t('settings_pubkey'))}>
+                {t('settings_copy')}
               </button>
             </div>
             <p className="field-hint">Use para receber arquivos de outros devices ou pessoas.</p>

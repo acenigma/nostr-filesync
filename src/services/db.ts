@@ -4,11 +4,13 @@ export const STORE_FILES = 'files';
 export const STORE_UPLOADS = 'uploads';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
+let currentName = DB_NAME;
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
+  const name = currentName;
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const req = indexedDB.open(name, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_FILES)) {
@@ -94,4 +96,14 @@ export async function del(store: string, key: IDBValidKey): Promise<void> {
 
 export async function clear(store: string): Promise<void> {
   await tx<undefined>(store, 'readwrite', (s) => s.clear());
+}
+
+export function __useIsolatedDatabaseForTesting(): void {
+  dbPromise?.then((db) => db.close()).catch(() => {});
+  dbPromise = null;
+  currentName = `${DB_NAME}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function __resetForTesting(): void {
+  dbPromise = null;
 }

@@ -1,5 +1,6 @@
 import { SimplePool, finalizeEvent, getPublicKey, nip19, type NostrEvent } from 'nostr-tools';
 import * as nip49 from 'nostr-tools/nip49';
+import * as nip42Lib from './nip42';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 
@@ -105,6 +106,7 @@ export async function initNostr(): Promise<{ publicKey: string | null; npub: str
   if (!pool) {
     pool = new SimplePool();
   }
+  nip42Lib.bindAuthContext(privateKey);
   if (publicKey) {
     pingRelays().catch(() => {});
   }
@@ -215,7 +217,7 @@ function looksLikeMnemonic(value: string): boolean {
   return true;
 }
 
-async function parseCredential(
+export async function parseCredential(
   input: string,
   currentPassword?: string
 ): Promise<{ sec: Uint8Array; source: string }> {
@@ -316,6 +318,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
 export function lock(): void {
   privateKey = null;
   publicKey = null;
+  nip42Lib.bindAuthContext(null);
   authState = { phase: 'locked' };
   emitAuth();
 }
@@ -482,6 +485,18 @@ export function parseTodoPayload(content: string): { text: string; done: boolean
   }
 }
 
+export function parseRelayTags(tags: string[][]): string[] {
+  const relays: string[] = [];
+  for (const tag of tags) {
+    if (tag[0] !== 'r') continue;
+    const url = tag[1];
+    if (!url) continue;
+    if (tag[2] === 'write') continue;
+    relays.push(url);
+  }
+  return relays;
+}
+
 export function subscribeToTodos(pubkey: string, onEvent: (e: NostrEvent) => void): () => void {
   if (!pool) return () => {};
   let cancelled = false;
@@ -493,7 +508,7 @@ export function subscribeToTodos(pubkey: string, onEvent: (e: NostrEvent) => voi
       sub = pool.subscribeMany(
         relays,
         { kinds: [KIND_TODO, KIND_DELETE], authors: [pubkey] },
-        { onevent: (e: NostrEvent) => onEvent(e) }
+        { onevent: (e: NostrEvent) => onEvent(e), onauth: nip42Lib.handleAuth }
       );
     } catch (e) {
       console.warn('Falha ao iniciar subscribe de tarefas', e);
@@ -575,15 +590,7 @@ async function fetchRelayListFromRelays(pubkey: string): Promise<string[]> {
     const latest = events.sort(
       (a, b) => (b.created_at ?? 0) - (a.created_at ?? 0)
     )[0];
-    const relays: string[] = [];
-    for (const tag of latest.tags) {
-      if (tag[0] !== 'r') continue;
-      const url = tag[1];
-      if (!url) continue;
-      if (tag[2] === 'write') continue;
-      relays.push(url);
-    }
-    return relays;
+    return parseRelayTags(latest.tags);
   } catch (e) {
     console.warn('Falha ao buscar kind:10002', e);
     return [];

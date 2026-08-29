@@ -5,6 +5,25 @@
   align-items: center;
   padding: 20px 0;
   box-sizing: border-box;
+  position: relative;
+}
+
+.global-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.global-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 8px var(--accent);
 }
 
 #root {
