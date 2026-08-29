@@ -1,0 +1,85 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0;
+  box-sizing: border-box;
+}
+
+#root {
+  border: none;
+  min-height: auto;
+  width: 100%;
+  max-width: 100%;
+}
+
+.top-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 4px;
+  background: var(--social-bg);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.nav-btn {
+  padding: 8px 18px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.nav-btn:hover {
+  color: var(--text-h);
+}
+
+.nav-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.nav-spacer {
+  flex: 1;
+}
+
+.nav-icon-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.nav-icon-btn:hover {
+  background: var(--social-bg);
+  color: var(--text-h);
+}
+
+.app-npub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.6;
+  margin-bottom: 8px;
+  cursor: help;
+}
+
+.init-loading,
+.init-error {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--text);
+}
+
+.init-error {
+  color: #ef4444;
+}

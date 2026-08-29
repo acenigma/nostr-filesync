@@ -1,0 +1,198 @@
+.mnemonic-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 150;
+  overflow-y: auto;
+}
+
+.mnemonic-card {
+  width: 100%;
+  max-width: 540px;
+  background: var(--social-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px 24px;
+  box-sizing: border-box;
+  box-shadow: rgba(0, 0, 0, 0.15) 0 10px 30px;
+}
+
+.mnemonic-card h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  text-align: center;
+  color: var(--text-h);
+}
+
+.mnemonic-subtitle {
+  text-align: center;
+  color: var(--text);
+  font-size: 14px;
+  margin: 0 0 16px;
+  line-height: 1.4;
+}
+
+.mnemonic-warning {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #d97706;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 16px;
+}
+
+.mnemonic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.mnemonic-grid.blurred .mnemonic-text {
+  filter: blur(6px);
+  user-select: none;
+}
+
+.mnemonic-word {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.mnemonic-num {
+  color: var(--text);
+  opacity: 0.5;
+  font-size: 11px;
+  min-width: 16px;
+  text-align: right;
+}
+
+.mnemonic-text {
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.mnemonic-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.mnemonic-btn {
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-h);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mnemonic-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mnemonic-btn.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.mnemonic-btn.primary:hover {
+  opacity: 0.85;
+  color: #fff;
+}
+
+.mnemonic-btn.block {
+  width: 100%;
+}
+
+.mnemonic-btn.secondary {
+  background: transparent;
+}
+
+.mnemonic-link {
+  background: none;
+  border: none;
+  color: var(--text);
+  opacity: 0.6;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 8px;
+  width: 100%;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.mnemonic-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.mnemonic-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.verify-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.verify-slot label {
+  display: block;
+  font-size: 13px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.verify-slot input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 14px;
+  font-family: var(--mono);
+  box-sizing: border-box;
+}
+
+.verify-slot input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.verify-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.verify-actions button {
+  flex: 1;
+}
