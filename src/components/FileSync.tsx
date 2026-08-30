@@ -134,18 +134,31 @@ export default function FileSync({ onProgress }: FileSyncProps = {}) {
         onDrop={onDrop}
       >
         <p>{t('upload_dropzone')}</p>
-        <label className="upload-btn">
-          {t('upload_choose')}
-          <input
-            type="file"
-            multiple
-            // @ts-expect-error webkitdirectory é não-padrão mas amplamente suportado
-            webkitdirectory=""
-            directory=""
-            onChange={onInputChange}
-            style={{ display: 'none' }}
-          />
-        </label>
+        <div className="upload-actions">
+          <label className="upload-btn">
+            {t('upload_choose')}
+            <input
+              type="file"
+              multiple
+              onChange={onInputChange}
+              style={{ display: 'none' }}
+              data-testid="file-input"
+            />
+          </label>
+          <label className="upload-btn secondary" title="Selecionar pasta inteira">
+            {t('upload_choose_folder')}
+            <input
+              type="file"
+              // @ts-expect-error webkitdirectory é não-padrão mas amplamente suportado
+              webkitdirectory=""
+              directory=""
+              multiple
+              onChange={onInputChange}
+              style={{ display: 'none' }}
+              data-testid="folder-input"
+            />
+          </label>
+        </div>
         <p className="hint">{t('upload_hint')}</p>
       </div>
 

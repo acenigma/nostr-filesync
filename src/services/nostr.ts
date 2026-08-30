@@ -319,6 +319,8 @@ export function lock(): void {
   privateKey = null;
   publicKey = null;
   nip42Lib.bindAuthContext(null);
+  sessionStorage.removeItem('nostr_filesync_session_pw');
+  sessionStorage.removeItem('nostr_filesync_keep_session');
   authState = { phase: 'locked' };
   emitAuth();
 }

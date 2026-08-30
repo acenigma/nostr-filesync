@@ -420,7 +420,6 @@ export async function publishFile(
     totalChunks: totalChunks + 1,
     startedAt: Date.now(),
   });
-
   await publishWithRetry(headerEvent, 3, signal);
   await uploadState.updateUploadState(fileId, { chunksDone: 1, headerPublished: true });
   onProgress?.({ phase: 'header', current: 1, total: totalChunks + 1 });
@@ -450,7 +449,7 @@ export async function publishFile(
     onProgress?.({ phase: 'chunk', current: i + 2, total: totalChunks + 1 });
   }
 
-await uploadState.markUploadComplete(fileId);
+  await uploadState.markUploadComplete(fileId);
 
   const record: FileRecord = {
     fileId,
@@ -508,13 +507,18 @@ async function publishWithRetry(
   for (let i = 0; i < attempts; i++) {
     throwIfAborted(signal);
     try {
-      const pubs = pool.publish(relays, event);
+      const pubs = pool.publish(relays, event, { maxWait: 8000 });
       const results = await Promise.allSettled(pubs);
       const ok = results.filter((r) => r.status === 'fulfilled').length;
       if (ok > 0) return ok;
       throw new Error('Nenhum relay aceitou');
     } catch (e) {
       lastError = e as Error;
+      if (signal?.aborted) {
+        const err = new Error('Operação cancelada');
+        err.name = 'AbortError';
+        throw err;
+      }
       await new Promise((r) => setTimeout(r, 800 * (i + 1)));
     }
   }

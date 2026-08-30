@@ -4,7 +4,6 @@ import * as filesync from '../services/filesync';
 import * as uploadState from '../services/uploadState';
 import type { FileHeaders, FileRecord, DownloadProgress } from '../services/filesync';
 import type { UploadState } from '../services/uploadState';
-import { useAbort } from './useAbort';
 import { useT } from './useT';
 
 export interface ProgressState {
@@ -40,7 +39,6 @@ export function useFileSync(options?: { onProgress?: (p: { pct: number; label: s
   const [dedupNotice, setDedupNotice] = useState<string | null>(null);
   const [pendingUploads, setPendingUploads] = useState<UploadState[]>([]);
   const mountedRef = useRef(true);
-  const operationAbort = useAbort();
   const { t } = useT();
   const tRef = useRef(t);
   tRef.current = t;
@@ -101,31 +99,27 @@ export function useFileSync(options?: { onProgress?: (p: { pct: number; label: s
       cb(null);
     }
   }, [uploading, downloading, options]);
-
   const handleFiles = useCallback(
     async (fileList: FileList | null, path: string) => {
       if (!fileList || fileList.length === 0) return;
       setError(null);
       setDedupNotice(null);
+      const uploadAbortController = new AbortController();
       const entries = Array.from(fileList);
-      const rootPrefixes = new Set<string>();
-      for (const f of entries) {
-        const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath;
-        if (rel && rel.includes('/')) {
-          rootPrefixes.add(rel.split('/')[0]);
-        }
-      }
       for (const file of entries) {
-        if (operationAbort.signal.aborted) return;
+        if (uploadAbortController.signal.aborted) {
+          return;
+        }
         setUploading({ name: file.name, current: 0, total: 1 });
         try {
           let effectivePath = path;
           const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
-          if (rel && rootPrefixes.size > 0) {
+          if (rel && rel.includes('/')) {
             const parts = rel.split('/');
-            if (parts.length > 1) parts.shift();
-            effectivePath = parts.join('/').replace(/\/[^/]+$/, '');
+            const relDir = parts.slice(0, -1).join('/');
+            effectivePath = path ? (path + '/' + relDir) : relDir;
           }
+
           const result = await filesync.publishFile(
             file,
             { path: effectivePath },
@@ -134,7 +128,7 @@ export function useFileSync(options?: { onProgress?: (p: { pct: number; label: s
                 setUploading({ name: file.name, current: p.current, total: p.total });
               }
             },
-            operationAbort.signal
+            uploadAbortController.signal
           );
           if (result.deduplicated) {
             setDedupNotice(`"${file.name}" — ${tRef.current('dedup_notice')}`);
@@ -150,13 +144,14 @@ export function useFileSync(options?: { onProgress?: (p: { pct: number; label: s
       }
       setUploading(null);
     },
-    [refresh, refreshPending, operationAbort.signal]
+    [refresh, refreshPending]
   );
 
   const onDownload = useCallback(
     async (file: FileRecord | FileHeaders) => {
       setError(null);
       setDownloading({ name: file.name, current: 0, total: file.chunks });
+      const downloadAbortController = new AbortController();
       try {
         const blob = await filesync.downloadFile(
           file as FileHeaders,
@@ -165,7 +160,7 @@ export function useFileSync(options?: { onProgress?: (p: { pct: number; label: s
               setDownloading({ name: file.name, current: p.current, total: p.total });
             }
           },
-          operationAbort.signal
+          downloadAbortController.signal
         );
         filesync.triggerDownload(blob, file.name);
       } catch (e) {
@@ -176,7 +171,7 @@ export function useFileSync(options?: { onProgress?: (p: { pct: number; label: s
         setDownloading(null);
       }
     },
-    [operationAbort.signal]
+    []
   );
 
   const onDelete = useCallback(

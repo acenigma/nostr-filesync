@@ -70,6 +70,19 @@
   opacity: 0.85;
 }
 
+.upload-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.upload-btn.secondary {
+  background: var(--social-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
 .progress-card {
   background: var(--social-bg);
   border: 1px solid var(--border);

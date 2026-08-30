@@ -28,6 +28,7 @@ export default function Unlock() {
   const [unlockTab, setUnlockTab] = useState<UnlockTab>('password');
   const [mnemonicInput, setMnemonicInput] = useState('');
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  const [keepSession, setKeepSession] = useState(false);
   const { t } = useT();
   const tRef = useMemo(() => ({ current: t }), [t]);
   const formatLabel = useMemo(() => formatLabelWith(t), [t]);
@@ -39,6 +40,17 @@ export default function Unlock() {
       else if (s.phase === 'plain') setMode('migrate');
       else if (s.phase === 'unlocked') setMode('unlocked');
     });
+    if (sessionStorage.getItem('nostr_filesync_keep_session') === '1') {
+      const stored = sessionStorage.getItem('nostr_filesync_session_pw');
+      if (stored) {
+        setPassword(stored);
+        setUnlockTab('password');
+        setTimeout(() => {
+          const btn = document.querySelector<HTMLFormElement>('.unlock-form');
+          btn?.requestSubmit();
+        }, 100);
+      }
+    }
     nostr.checkStoredCredential();
     return unsub;
   }, []);
@@ -98,6 +110,13 @@ export default function Unlock() {
     setBusy(true);
     try {
       await nostr.unlockWithPassword(password);
+      if (keepSession) {
+        sessionStorage.setItem('nostr_filesync_session_pw', password);
+        sessionStorage.setItem('nostr_filesync_keep_session', '1');
+      } else {
+        sessionStorage.removeItem('nostr_filesync_session_pw');
+        sessionStorage.removeItem('nostr_filesync_keep_session');
+      }
     } catch {
       setError(tRef.current('unlock_unlock_failed'));
     } finally {
@@ -275,6 +294,15 @@ export default function Unlock() {
                   autoFocus
                   disabled={busy}
                 />
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={keepSession}
+                    onChange={(e) => setKeepSession(e.target.checked)}
+                    disabled={busy}
+                  />
+                  <span>{t('unlock_session_keep')}</span>
+                </label>
                 {error && <div className="unlock-error">{error}</div>}
                 <button type="submit" className="unlock-btn" disabled={busy}>
                   {busy ? t('unlock_unlocking') : t('unlock_unlock')}
@@ -301,6 +329,7 @@ export default function Unlock() {
                 </button>
               </form>
             )}
+            <p className="unlock-hint">{t('unlock_session_hint')}</p>
             <div className="unlock-divider">{t('unlock_or')}</div>
             <button
               className="unlock-link-btn"
