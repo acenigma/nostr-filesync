@@ -6,7 +6,7 @@ export const STORE_UPLOADS = 'uploads';
 export const STORE_FOLDERS = 'folders';
 export const STORE_TOMBSTONES = 'tombstones';
 
-export const SCHEMA_VERSION_FILES = 1;
+export const SCHEMA_VERSION_FILES = 2;
 export const SCHEMA_VERSION_UPLOADS = 1;
 export const SCHEMA_VERSION_FOLDERS = 1;
 export const SCHEMA_VERSION_TOMBSTONES = 1;
@@ -17,6 +17,26 @@ export interface FolderRecord {
   name: string;
   createdAt: number;
   updatedAt: number;
+  version: number;
+}
+
+export interface FileRecord {
+  fileId: string;
+  folderId: string | null;
+  name: string;
+  mimeType: string;
+  size: number;
+  contentHash: string;
+  encryptedHash?: string;
+  chunks: number;
+  headerEventId: string;
+  createdAt: number;
+  updatedAt: number;
+  version: number;
+  encrypted: boolean;
+  compression?: string;
+  path?: string;
+  deduplicated?: boolean;
 }
 
 export interface TombstoneRecord {

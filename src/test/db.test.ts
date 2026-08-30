@@ -269,6 +269,7 @@ describe('db.ts — Versionamento e Migrations', () => {
       name: 'Test',
       createdAt: 0,
       updatedAt: 0,
+      version: 1,
     };
     const tomb: db.TombstoneRecord = {
       entityId: 'f-1',
@@ -370,6 +371,7 @@ describe('db.ts — Versionamento e Migrations', () => {
       name: 'TestFolder',
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      version: 1,
     };
     await db.put(db.STORE_FOLDERS, testFolder);
     const folders = await db.getAll<db.FolderRecord>(db.STORE_FOLDERS);
