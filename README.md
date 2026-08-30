@@ -34,7 +34,7 @@ PWA (Progressive Web App) que sincroniza **arquivos** e **tarefas** entre dispos
 - **Deduplicação por hash** (sha256 do plaintext + nome + tamanho)
 - Organização em pastas (tag `path`)
 - **Drag-drop de pastas** (via `webkitGetAsEntry` API; estrutura preservada como `path`)
-- Upload de arquivos ou diretórios inteiros via botão "choose files" (com `webkitdirectory` quando suportado)
+- Upload de arquivos ou diretórios inteiros via botão "choose files" (com `webkitdirectory` quando suportado). Quando um diretório é selecionado, a estrutura interna é preservada e os arquivos são organizados automaticamente em subpastas correspondentes
 - Download com verificação de integridade por hash
 - Deleção remota (kind 5 com `k=1063`)
 - **Thumbnails lazy** para `image/*` e `video/*` (via `IntersectionObserver`, cancelamento via AbortController)

@@ -388,7 +388,27 @@ Hoje: `DB_VERSION = 1`, sem mecanismo de upgrade além do `onupgradeneeded` vazi
 
 ---
 
-## Resumo de esforço
+## Fase L — 📁 Gestão de pastas
+
+### L.1 Caso de uso
+
+- Criar pastas vazias manualmente (organização prévia antes do upload)
+- Mover arquivos ou subpastas entre pastas (drag-drop na árvore)
+- Renomear pastas
+- Deletar pastas (cascade delete: remove arquivos dentro)
+
+### L.2 Implementação
+
+- Nova ação em `FileSync.tsx`: botão "New folder" → input de texto → cria entry com `path` no IDB sem arquivo associado (kind 1063 opcional com tag `t` = "folder")
+- No `TreeView`: drag-drop de `FileRow` entre pastas → atualiza `path` do record local + evento kind 5 + novo kind 1063 com `path` atualizado
+- Rename: atualiza `path` de todos os arquivos na pasta (prefix-match)
+- Delete folder: remove todos os arquivos recursivamente + kind 5 para cada evento remoto
+
+### L.3 Esforço: ~3-4 dias
+
+- Risco: eventos Nostr são imutáveis → mover = publicar novo header + kind 5 para o antigo
+
+---
 
 | Fase | Descrição | Esforço | Dependências |
 |------|-----------|---------|--------------|
@@ -404,7 +424,9 @@ Hoje: `DB_VERSION = 1`, sem mecanismo de upgrade além do `onupgradeneeded` vazi
 | J | Bundle export | 3 dias | nenhuma |
 | K | Melhorias técnicas | contínua | — |
 
-**Total realista para tudo: ~4-6 semanas de dev.**
+| L | Gestão de pastas | 3-4 dias | K.1 (schema) |
+
+**Total realista para tudo: ~5-7 semanas de dev.**
 
 ## Combinações sugeridas
 

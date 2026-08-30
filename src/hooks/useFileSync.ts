@@ -106,10 +106,6 @@ export function useFileSync(options?: { onProgress?: (p: { pct: number; label: s
       setDedupNotice(null);
       const uploadAbortController = new AbortController();
       const entries = Array.from(fileList);
-      entries.forEach((f, i) => {
-        const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath;
-        console.log('[DEBUG] File', i, ':', f.name, 'webkitRelativePath:', rel);
-      });
       for (const file of entries) {
         if (uploadAbortController.signal.aborted) {
           return;
@@ -126,7 +122,6 @@ export function useFileSync(options?: { onProgress?: (p: { pct: number; label: s
               effectivePath = path ? (path + '/' + relDir) : relDir;
             }
           }
-          console.log('[DEBUG] file:', file.name, 'rel:', rel, 'effectivePath:', effectivePath);
           const result = await filesync.publishFile(
             file,
             { path: effectivePath },
