@@ -29,9 +29,15 @@ function validateEntityId(id: string): void {
   }
 }
 
-function validatePubkey(pubkey: string): void {
-  if (!pubkey || !/^[0-9a-f]{64}$/i.test(pubkey)) {
-    throw new TombstoneError('deletedBy deve ser uma pubkey hex de 64 chars', 'INVALID_INPUT');
+function validateDeletedBy(by: string): void {
+  if (!by) {
+    throw new TombstoneError('deletedBy não pode ser vazio', 'INVALID_INPUT');
+  }
+  // Pubkey hex de 64 chars
+  if (by.length === 64 && /^[0-9a-f]{64}$/i.test(by)) return;
+  // Identificador de sistema (ex: 'remote-sync', 'user') — curto
+  if (by.length > 32) {
+    throw new TombstoneError('deletedBy inválido: deve ser pubkey hex de 64 chars ou identificador de sistema curto', 'INVALID_INPUT');
   }
 }
 
@@ -41,7 +47,7 @@ function validatePubkey(pubkey: string): void {
  */
 export async function createTombstone(input: CreateTombstoneInput): Promise<TombstoneRecord> {
   validateEntityId(input.entityId);
-  validatePubkey(input.deletedBy);
+  validateDeletedBy(input.deletedBy);
 
   const existing = await getTombstone(input.entityId);
   const now = Date.now();

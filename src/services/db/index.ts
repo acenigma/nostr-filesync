@@ -1,15 +1,21 @@
 export const DB_NAME = 'nostr-filesync';
-export const DB_VERSION = 2;
+export const DB_VERSION = 5;
 
 export const STORE_FILES = 'files';
 export const STORE_UPLOADS = 'uploads';
 export const STORE_FOLDERS = 'folders';
 export const STORE_TOMBSTONES = 'tombstones';
+export const STORE_SYNC_QUEUE = 'sync_queue';
+export const STORE_SYNC_CURSORS = 'sync_cursors';
+export const STORE_DEVICES = 'devices';
 
 export const SCHEMA_VERSION_FILES = 2;
 export const SCHEMA_VERSION_UPLOADS = 1;
 export const SCHEMA_VERSION_FOLDERS = 1;
 export const SCHEMA_VERSION_TOMBSTONES = 1;
+export const SCHEMA_VERSION_SYNC_QUEUE = 1;
+export const SCHEMA_VERSION_SYNC_CURSORS = 1;
+export const SCHEMA_VERSION_DEVICES = 1;
 
 export interface FolderRecord {
   id: string;
@@ -46,6 +52,61 @@ export interface TombstoneRecord {
   version: number;
 }
 
+export type SyncOperationType =
+  | 'CREATE'
+  | 'UPDATE'
+  | 'MOVE'
+  | 'RENAME'
+  | 'DELETE'
+  | 'RESTORE'
+  | 'UPLOAD'
+  | 'DOWNLOAD';
+
+export type SyncOperationStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface SyncOperation {
+  id: string;
+  type: SyncOperationType;
+  entityId: string;
+  entityType: 'file' | 'folder';
+  payload?: unknown;
+  createdAt: number;
+  attempts: number;
+  nextAttemptAt: number;
+  status: SyncOperationStatus;
+  lastError?: string;
+  updatedAt: number;
+}
+
+export interface SyncCursor {
+  /** ${pubkey}:${relayUrl} */
+  id: string;
+  pubkey: string;
+  relayUrl: string;
+  lastEventId: string;
+  lastEventCreatedAt: number;
+  updatedAt: number;
+}
+
+export type DevicePlatform = 'web' | 'android' | 'ios' | 'desktop' | 'unknown';
+
+export interface Device {
+  id: string;
+  pubkey: string;
+  name: string;
+  platform: DevicePlatform;
+  appVersion: string;
+  lastSeen: number;
+  capabilities: string[];
+  isLocal: boolean;
+  createdAt: number;
+}
+
 interface Migration {
   version: number;
   up: (db: IDBDatabase) => void;
@@ -60,6 +121,36 @@ const migrations: Migration[] = [
       }
       if (!db.objectStoreNames.contains(STORE_TOMBSTONES)) {
         db.createObjectStore(STORE_TOMBSTONES, { keyPath: 'entityId' });
+      }
+    },
+  },
+  {
+    version: 3,
+    up: (db: IDBDatabase): void => {
+      if (!db.objectStoreNames.contains(STORE_SYNC_QUEUE)) {
+        const store = db.createObjectStore(STORE_SYNC_QUEUE, { keyPath: 'id' });
+        store.createIndex('status', 'status', { unique: false });
+        store.createIndex('nextAttemptAt', 'nextAttemptAt', { unique: false });
+        store.createIndex('entityId', 'entityId', { unique: false });
+      }
+    },
+  },
+  {
+    version: 4,
+    up: (db: IDBDatabase): void => {
+      if (!db.objectStoreNames.contains(STORE_SYNC_CURSORS)) {
+        const store = db.createObjectStore(STORE_SYNC_CURSORS, { keyPath: 'id' });
+        store.createIndex('pubkey', 'pubkey', { unique: false });
+      }
+    },
+  },
+  {
+    version: 5,
+    up: (db: IDBDatabase): void => {
+      if (!db.objectStoreNames.contains(STORE_DEVICES)) {
+        const store = db.createObjectStore(STORE_DEVICES, { keyPath: 'id' });
+        store.createIndex('pubkey', 'pubkey', { unique: false });
+        store.createIndex('lastSeen', 'lastSeen', { unique: false });
       }
     },
   },

@@ -40,13 +40,17 @@ describe('createTombstone', () => {
     ).rejects.toThrow(TombstoneError);
   });
 
-  it('lança erro em deletedBy inválido (curto)', async () => {
+  it('lança erro em deletedBy muito longo', async () => {
     await expect(
-      tombstones.createTombstone({ entityId: 'f-1', entityType: 'file', deletedBy: 'abc' })
+      tombstones.createTombstone({
+        entityId: 'f-1',
+        entityType: 'file',
+        deletedBy: 'a'.repeat(33),
+      })
     ).rejects.toThrow(TombstoneError);
   });
 
-  it('lança erro em deletedBy com caracteres não-hex', async () => {
+  it('lança erro em deletedBy com 64 chars não-hex', async () => {
     await expect(
       tombstones.createTombstone({
         entityId: 'f-1',
@@ -54,6 +58,15 @@ describe('createTombstone', () => {
         deletedBy: 'g'.repeat(64),
       })
     ).rejects.toThrow(TombstoneError);
+  });
+
+  it('aceita deletedBy de sistema (ex: remote-sync)', async () => {
+    const tomb = await tombstones.createTombstone({
+      entityId: 'f-1',
+      entityType: 'file',
+      deletedBy: 'remote-sync',
+    });
+    expect(tomb.entityId).toBe('f-1');
   });
 
   it('idempotente: criar 2x para mesma entidade atualiza version', async () => {
