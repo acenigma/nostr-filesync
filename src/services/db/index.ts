@@ -1,5 +1,5 @@
 export const DB_NAME = 'nostr-filesync';
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 export const STORE_FILES = 'files';
 export const STORE_UPLOADS = 'uploads';
@@ -8,6 +8,7 @@ export const STORE_TOMBSTONES = 'tombstones';
 export const STORE_SYNC_QUEUE = 'sync_queue';
 export const STORE_SYNC_CURSORS = 'sync_cursors';
 export const STORE_DEVICES = 'devices';
+export const STORE_BLOBS = 'blobs';
 
 export const SCHEMA_VERSION_FILES = 2;
 export const SCHEMA_VERSION_UPLOADS = 1;
@@ -16,6 +17,7 @@ export const SCHEMA_VERSION_TOMBSTONES = 1;
 export const SCHEMA_VERSION_SYNC_QUEUE = 1;
 export const SCHEMA_VERSION_SYNC_CURSORS = 1;
 export const SCHEMA_VERSION_DEVICES = 1;
+export const SCHEMA_VERSION_BLOBS = 1;
 
 export interface FolderRecord {
   id: string;
@@ -107,6 +109,17 @@ export interface Device {
   createdAt: number;
 }
 
+export interface BlobRecord {
+  contentHash: string;
+  size: number;
+  encrypted: boolean;
+  compression?: 'gzip' | 'none';
+  compressedSize?: number;
+  refCount: number;
+  createdAt: number;
+  lastAccessedAt: number;
+}
+
 interface Migration {
   version: number;
   up: (db: IDBDatabase) => void;
@@ -151,6 +164,16 @@ const migrations: Migration[] = [
         const store = db.createObjectStore(STORE_DEVICES, { keyPath: 'id' });
         store.createIndex('pubkey', 'pubkey', { unique: false });
         store.createIndex('lastSeen', 'lastSeen', { unique: false });
+      }
+    },
+  },
+  {
+    version: 6,
+    up: (db: IDBDatabase): void => {
+      if (!db.objectStoreNames.contains(STORE_BLOBS)) {
+        const store = db.createObjectStore(STORE_BLOBS, { keyPath: 'contentHash' });
+        store.createIndex('refCount', 'refCount', { unique: false });
+        store.createIndex('lastAccessedAt', 'lastAccessedAt', { unique: false });
       }
     },
   },

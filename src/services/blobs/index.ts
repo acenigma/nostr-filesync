@@ -122,3 +122,7 @@ export async function computeDedupStats(): Promise<DedupStats> {
     potentialSavings,
   };
 }
+
+export * from './storage';
+export * from './dedup';
+
