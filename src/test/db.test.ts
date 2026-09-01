@@ -247,14 +247,21 @@ describe('db.ts — Versionamento e Migrations', () => {
       createObjectStore: (name: string) => {
         stores.add(name);
         createdStores.push(name);
-        return { name } as any;
+        const mockStore = {
+          name,
+          createIndex: (indexName: string) => {
+            // mock implementation
+            return { name: indexName };
+          },
+        };
+        return mockStore as any;
       },
       createdStores,
     } as unknown as IDBDatabase;
   }
 
-  it('DB_VERSION é 6', () => {
-    expect(db.DB_VERSION).toBe(6);
+  it('DB_VERSION é 8', () => {
+    expect(db.DB_VERSION).toBe(8);
   });
 
   it('exports STORE_FOLDERS e STORE_TOMBSTONES', () => {
@@ -350,6 +357,14 @@ describe('db.ts — Versionamento e Migrations', () => {
     expect(mockDb.objectStoreNames.contains('folders')).toBe(true);
   });
 
+  it('applyMigrations v7→v8 cria store trash', () => {
+    const mockDb = createMockDb(new Set(['files', 'uploads', 'folders', 'tombstones', 'sync_queue', 'sync_cursors', 'devices', 'blobs', 'file_versions']));
+
+    db.applyMigrations(mockDb, 7, 8);
+
+    expect(mockDb.objectStoreNames.contains('trash')).toBe(true);
+  });
+
   it('migrations não faz nada se oldVersion >= target', () => {
     const mockDb = createMockDb(new Set(['files', 'uploads']));
 
@@ -391,11 +406,13 @@ describe('db.ts — Versionamento e Migrations', () => {
   });
 
   it('migrations lista está correta', () => {
-    expect(db.migrations.length).toBe(5);
+    expect(db.migrations.length).toBe(7);
     expect(db.migrations[0].version).toBe(2);
     expect(db.migrations[1].version).toBe(3);
     expect(db.migrations[2].version).toBe(4);
     expect(db.migrations[3].version).toBe(5);
     expect(db.migrations[4].version).toBe(6);
+    expect(db.migrations[5].version).toBe(7);
+    expect(db.migrations[6].version).toBe(8);
   });
 });

@@ -171,7 +171,7 @@ describe('updateFile (rename)', () => {
     const file = await fileEntity.createFile(makeInput({ name: 'same.pdf' }));
     const updated = await fileEntity.renameFile(file.fileId, 'same.pdf');
     expect(updated.name).toBe('same.pdf');
-    expect(updated.version).toBe(2);
+    expect(updated.version).toBe(1);
   });
 });
 
@@ -228,7 +228,7 @@ describe('updateFile (move)', () => {
 describe('deleteFile', () => {
   it('deleta arquivo existente', async () => {
     const file = await fileEntity.createFile(makeInput());
-    await fileEntity.deleteFile(file.fileId);
+    await fileEntity.deleteFile(file.fileId, { permanent: true });
     expect(await fileEntity.getFile(file.fileId)).toBeNull();
   });
 

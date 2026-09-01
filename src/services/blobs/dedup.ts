@@ -102,7 +102,7 @@ export async function mergeDuplicates(
   const removedFileIds: string[] = [];
   for (const file of duplicates) {
     if (file.fileId === kept.fileId) continue;
-    await fileEntity.deleteFile(file.fileId);
+    await fileEntity.deleteFile(file.fileId, { permanent: true });
     removedFileIds.push(file.fileId);
   }
 

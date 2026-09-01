@@ -76,7 +76,7 @@ describe('Integration: Folder + File', () => {
     const child = await folders.createFolder({ name: 'child', parentId: root.id });
     const grandchild = await folders.createFolder({ name: 'gc', parentId: child.id });
 
-    const deleted = await folders.deleteFolder(root.id);
+    const deleted = await folders.deleteFolder(root.id, { permanent: true });
     expect(deleted).toHaveLength(3);
 
     expect(await folders.getFolder(root.id)).toBeNull();
@@ -89,7 +89,7 @@ describe('Integration: Folder + File', () => {
     const b = await folders.createFolder({ name: 'B' });
     await fileEntity.createFile(makeFile('only.txt', { folderId: b.id }));
 
-    await folders.deleteFolder(a.id);
+    await folders.deleteFolder(a.id, { permanent: true });
 
     expect(await folders.getFolder(b.id)).not.toBeNull();
     const files = await fileEntity.listFiles(b.id);
@@ -118,7 +118,7 @@ describe('Integration: Folder + File + Tombstone', () => {
       entityType: 'file',
       deletedBy: PUBKEY,
     });
-    await fileEntity.deleteFile(file.fileId);
+    await fileEntity.deleteFile(file.fileId, { permanent: true });
 
     expect(await fileEntity.getFile(file.fileId)).toBeNull();
     expect(await tombstones.isDeleted(file.fileId, 'file')).toBe(true);
@@ -134,7 +134,7 @@ describe('Integration: Folder + File + Tombstone', () => {
       entityType: 'folder',
       deletedBy: PUBKEY,
     });
-    const deletedFolders = await folders.deleteFolder(root.id);
+    const deletedFolders = await folders.deleteFolder(root.id, { permanent: true });
 
     expect(deletedFolders).toContain(root.id);
     expect(deletedFolders).toContain(child.id);
@@ -270,7 +270,7 @@ describe('Integration: deep tree operations', () => {
     await fileEntity.createFile(makeFile('b.txt', { folderId: sub1.id }));
     await fileEntity.createFile(makeFile('c.txt', { folderId: sub2.id }));
 
-    const deletedFolders = await folders.deleteFolder(root.id);
+    const deletedFolders = await folders.deleteFolder(root.id, { permanent: true });
     expect(deletedFolders).toHaveLength(3);
 
     // Arquivos ainda existem (cascade delete é só de pastas)
@@ -288,7 +288,7 @@ describe('Integration: tombstone + file uniqueness', () => {
       entityType: 'file',
       deletedBy: PUBKEY,
     });
-    await fileEntity.deleteFile(f1.fileId);
+    await fileEntity.deleteFile(f1.fileId, { permanent: true });
 
     // Agora pode recriar
     const f2 = await fileEntity.createFile(makeFile('a.txt', { folderId: folder.id }));

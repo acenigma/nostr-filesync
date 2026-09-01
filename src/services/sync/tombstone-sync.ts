@@ -20,12 +20,12 @@ export async function applyRemoteTombstone(
   if (entry.type === 'file') {
     const existing = await fileEntity.getFile(entry.entityId);
     if (existing) {
-      await fileEntity.deleteFile(entry.entityId);
+      await fileEntity.deleteFile(entry.entityId, { permanent: true });
     }
   } else if (entry.type === 'folder') {
     const existing = await folders.getFolder(entry.entityId);
     if (existing) {
-      await folders.deleteFolder(entry.entityId);
+      await folders.deleteFolder(entry.entityId, { permanent: true });
     }
   }
 

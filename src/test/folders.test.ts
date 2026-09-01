@@ -214,7 +214,7 @@ describe('updateFolder (move)', () => {
 describe('deleteFolder', () => {
   it('deleta pasta sem filhos', async () => {
     const folder = await folders.createFolder({ name: 'lonely' });
-    const deleted = await folders.deleteFolder(folder.id);
+    const deleted = await folders.deleteFolder(folder.id, { permanent: true });
     expect(deleted).toEqual([folder.id]);
     expect(await folders.getFolder(folder.id)).toBeNull();
   });
@@ -225,7 +225,7 @@ describe('deleteFolder', () => {
     const grandchild = await folders.createFolder({ name: 'gc', parentId: child.id });
     const sibling = await folders.createFolder({ name: 'sibling' });
 
-    const deleted = await folders.deleteFolder(root.id);
+    const deleted = await folders.deleteFolder(root.id, { permanent: true });
     expect(deleted.sort()).toEqual([root.id, child.id, grandchild.id].sort());
 
     expect(await folders.getFolder(root.id)).toBeNull();
@@ -247,7 +247,7 @@ describe('deleteFolder', () => {
     }
     const root = (await folders.listFolders(null))[0];
 
-    const deleted = await folders.deleteFolder(root.id);
+    const deleted = await folders.deleteFolder(root.id, { permanent: true });
     expect(deleted).toHaveLength(10);
   });
 });

@@ -1,6 +1,8 @@
 import * as db from '../db/index';
 import type { FileRecord } from '../db/index';
 import * as folders from '../folders/index';
+import * as versions from '../versions/index';
+import * as trash from '../trash/index';
 
 export type { FileRecord };
 
@@ -138,7 +140,9 @@ export async function updateFile(
     }
   }
 
-  if (nextName !== existing.name || nextFolderId !== existing.folderId) {
+  const hasChanges = nextName !== existing.name || nextFolderId !== existing.folderId;
+
+  if (hasChanges) {
     const conflict = await findByFolderAndName(nextFolderId, nextName);
     if (conflict && conflict.fileId !== fileId) {
       throw new FileEntityError(
@@ -146,17 +150,34 @@ export async function updateFile(
         'DUPLICATE_NAME'
       );
     }
+
+    const newVersion = existing.version + 1;
+    const now = Date.now();
+
+    await versions.createVersion({
+      fileId: existing.fileId,
+      parentVersionId: null,
+      contentHash: existing.contentHash,
+      size: existing.size,
+      name: existing.name,
+      folderId: existing.folderId,
+      mimeType: existing.mimeType,
+      version: existing.version,
+      createdBy: 'local',
+    });
+
+    const updated: FileRecord = {
+      ...existing,
+      name: nextName,
+      folderId: nextFolderId,
+      updatedAt: now,
+      version: newVersion,
+    };
+    await db.put(db.STORE_FILES, updated);
+    return updated;
   }
 
-  const updated: FileRecord = {
-    ...existing,
-    name: nextName,
-    folderId: nextFolderId,
-    updatedAt: Date.now(),
-    version: existing.version + 1,
-  };
-  await db.put(db.STORE_FILES, updated);
-  return updated;
+  return existing;
 }
 
 export async function moveFile(fileId: string, newFolderId: string | null): Promise<FileRecord> {
@@ -167,12 +188,16 @@ export async function renameFile(fileId: string, newName: string): Promise<FileR
   return updateFile(fileId, { name: newName });
 }
 
-export async function deleteFile(fileId: string): Promise<void> {
+export async function deleteFile(fileId: string, options: { permanent?: boolean } = {}): Promise<void> {
   const existing = await getFile(fileId);
   if (!existing) {
     throw new FileEntityError(`Arquivo não encontrado: ${fileId}`, 'NOT_FOUND');
   }
-  await db.del(db.STORE_FILES, fileId);
+  if (options.permanent) {
+    await db.del(db.STORE_FILES, fileId);
+  } else {
+    await trash.moveToTrash(fileId);
+  }
 }
 
 export async function findByContentHash(contentHash: string): Promise<FileRecord | null> {

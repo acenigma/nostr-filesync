@@ -1,5 +1,5 @@
 export const DB_NAME = 'nostr-filesync';
-export const DB_VERSION = 6;
+export const DB_VERSION = 8;
 
 export const STORE_FILES = 'files';
 export const STORE_UPLOADS = 'uploads';
@@ -9,6 +9,8 @@ export const STORE_SYNC_QUEUE = 'sync_queue';
 export const STORE_SYNC_CURSORS = 'sync_cursors';
 export const STORE_DEVICES = 'devices';
 export const STORE_BLOBS = 'blobs';
+export const STORE_FILE_VERSIONS = 'file_versions';
+export const STORE_TRASH = 'trash';
 
 export const SCHEMA_VERSION_FILES = 2;
 export const SCHEMA_VERSION_UPLOADS = 1;
@@ -18,6 +20,8 @@ export const SCHEMA_VERSION_SYNC_QUEUE = 1;
 export const SCHEMA_VERSION_SYNC_CURSORS = 1;
 export const SCHEMA_VERSION_DEVICES = 1;
 export const SCHEMA_VERSION_BLOBS = 1;
+export const SCHEMA_VERSION_FILE_VERSIONS = 1;
+export const SCHEMA_VERSION_TRASH = 1;
 
 export interface FolderRecord {
   id: string;
@@ -52,6 +56,16 @@ export interface TombstoneRecord {
   entityType: 'file' | 'folder';
   deletedAt: number;
   version: number;
+}
+
+export interface TrashRecord {
+  id: string;
+  entityType: 'file' | 'folder';
+  entityId: string;
+  originalData: unknown;
+  deletedAt: number;
+  deletedBy: string;
+  originalVersion: number;
 }
 
 export type SyncOperationType =
@@ -120,6 +134,25 @@ export interface BlobRecord {
   lastAccessedAt: number;
 }
 
+export interface FileVersion {
+  id: string;
+  fileId: string;
+  parentVersionId: string | null;
+  contentHash: string;
+  size: number;
+  name: string;
+  folderId: string | null;
+  mimeType: string;
+  createdAt: number;
+  createdBy: string;
+  version: number;
+}
+
+export interface FileVersions {
+  currentVersion: number;
+  versions: FileVersion[];
+}
+
 interface Migration {
   version: number;
   up: (db: IDBDatabase) => void;
@@ -174,6 +207,28 @@ const migrations: Migration[] = [
         const store = db.createObjectStore(STORE_BLOBS, { keyPath: 'contentHash' });
         store.createIndex('refCount', 'refCount', { unique: false });
         store.createIndex('lastAccessedAt', 'lastAccessedAt', { unique: false });
+      }
+    },
+  },
+  {
+    version: 7,
+    up: (db: IDBDatabase): void => {
+      if (!db.objectStoreNames.contains(STORE_FILE_VERSIONS)) {
+        const store = db.createObjectStore(STORE_FILE_VERSIONS, { keyPath: 'id' });
+        store.createIndex('fileId', 'fileId', { unique: false });
+        store.createIndex('contentHash', 'contentHash', { unique: false });
+        store.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+    },
+  },
+  {
+    version: 8,
+    up: (db: IDBDatabase): void => {
+      if (!db.objectStoreNames.contains(STORE_TRASH)) {
+        const store = db.createObjectStore(STORE_TRASH, { keyPath: 'id' });
+        store.createIndex('entityType', 'entityType', { unique: false });
+        store.createIndex('entityId', 'entityId', { unique: false });
+        store.createIndex('deletedAt', 'deletedAt', { unique: false });
       }
     },
   },

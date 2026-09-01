@@ -1,5 +1,6 @@
 import * as db from '../db/index';
 import type { FolderRecord } from '../db/index';
+import * as trash from '../trash/index';
 
 export type { FolderRecord };
 
@@ -159,7 +160,7 @@ async function isDescendant(candidateParentId: string, ancestorId: string): Prom
   return false;
 }
 
-export async function deleteFolder(id: string): Promise<string[]> {
+export async function deleteFolder(id: string, options: { permanent?: boolean } = {}): Promise<string[]> {
   const folder = await getFolder(id);
   if (!folder) {
     throw new FolderError(`Pasta não encontrada: ${id}`, 'NOT_FOUND');
@@ -169,8 +170,14 @@ export async function deleteFolder(id: string): Promise<string[]> {
   const toDelete = collectDescendants(all, id);
   toDelete.push(id);
 
-  for (const folderId of toDelete) {
-    await db.del(db.STORE_FOLDERS, folderId);
+  if (options.permanent) {
+    for (const folderId of toDelete) {
+      await db.del(db.STORE_FOLDERS, folderId);
+    }
+  } else {
+    for (const folderId of toDelete) {
+      await trash.moveFolderToTrash(folderId);
+    }
   }
   return toDelete;
 }
