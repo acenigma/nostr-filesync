@@ -2,4 +2,7 @@
 export * from '../nostr';
 
 // Re-export do signer
-export { LocalSigner, NIP46Signer, createSigner, type Signer } from './signer';
+export { LocalSigner, NIP46Signer, NIP07Signer, createSigner, type Signer } from './signer';
+
+// Re-export de tipos de passkey
+export type { PasskeyInfo, AuthenticationResult } from '../passkey';

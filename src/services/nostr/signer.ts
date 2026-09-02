@@ -1,4 +1,5 @@
 import { finalizeEvent, getPublicKey, type EventTemplate, type VerifiedEvent } from 'nostr-tools';
+import '../../types/nip07';
 
 /**
  * Assinatura de evento Nostr abstraída.
@@ -80,12 +81,46 @@ export class NIP46Signer implements Signer {
 }
 
 /**
+ * Signer que delega assinatura a uma extensão de navegador (NIP-07).
+ */
+export class NIP07Signer implements Signer {
+  private pubkey: string | null = null;
+
+  static isAvailable(): boolean {
+    return typeof window !== 'undefined' && !!window.nostr;
+  }
+
+  async getPublicKey(): Promise<string> {
+    if (!window.nostr) {
+      throw new Error('NIP-07 não detectado. Instale uma extensão Nostr compatível.');
+    }
+    this.pubkey = await window.nostr.getPublicKey();
+    return this.pubkey;
+  }
+
+  async signEvent(event: EventTemplate): Promise<VerifiedEvent> {
+    if (!window.nostr) {
+      throw new Error('NIP-07 não detectado. Instale uma extensão Nostr compatível.');
+    }
+    return window.nostr.signEvent(event);
+  }
+
+  getPubkey(): string | null {
+    return this.pubkey;
+  }
+}
+
+/**
  * Factory: cria um Signer apropriado baseado na fonte de identidade.
  */
 export async function createSigner(
   privateKey: Uint8Array | null,
-  remoteSigner: { getPublicKey: () => Promise<string> } | null
+  remoteSigner: { getPublicKey: () => Promise<string> } | null,
+  options?: { preferNIP07?: boolean }
 ): Promise<Signer> {
+  if (options?.preferNIP07 && NIP07Signer.isAvailable()) {
+    return new NIP07Signer();
+  }
   if (privateKey) {
     return new LocalSigner(privateKey);
   }
@@ -96,6 +131,9 @@ export async function createSigner(
         throw new Error('Remote signer signEvent() requer integração completa do bunker');
       },
     };
+  }
+  if (NIP07Signer.isAvailable()) {
+    return new NIP07Signer();
   }
   throw new Error('Nenhuma fonte de assinatura disponível');
 }

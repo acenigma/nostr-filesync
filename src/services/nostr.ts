@@ -1,6 +1,7 @@
 import { SimplePool, finalizeEvent, getPublicKey, nip19, type NostrEvent } from 'nostr-tools';
 import * as nip49 from 'nostr-tools/nip49';
 import * as nip42Lib from './nip42';
+import * as passkey from './passkey';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 
@@ -123,6 +124,7 @@ export async function unlockWithPassword(password: string): Promise<IdentityInfo
   await initNostr();
   authState = { phase: 'unlocked' };
   emitAuth();
+  resetAutoLockTimer();
   return { publicKey, npub: nip19.npubEncode(publicKey) };
 }
 
@@ -140,6 +142,7 @@ export async function createNewIdentity(password: string): Promise<IdentityInfo>
   await initNostr();
   authState = { phase: 'unlocked' };
   emitAuth();
+  resetAutoLockTimer();
   return { publicKey, npub: nip19.npubEncode(publicKey), nsec, ncryptsec, mnemonic };
 }
 
@@ -174,6 +177,7 @@ export async function unlockWithMnemonic(phrase: string): Promise<IdentityInfo> 
   await initNostr();
   authState = { phase: 'unlocked' };
   emitAuth();
+  resetAutoLockTimer();
   return { publicKey, npub: npubNow };
 }
 
@@ -195,6 +199,10 @@ async function getStoredNpub(): Promise<string | null> {
 
 export function hasMnemonicBackup(): boolean {
   return !!localStorage.getItem(STORAGE_MNEMONIC);
+}
+
+export function hasPasskeyBackup(): boolean {
+  return passkey.listPasskeys().length > 0;
 }
 
 export function revealMnemonic(password: string): string {
@@ -278,6 +286,7 @@ export async function importCredential(
   await initNostr();
   authState = { phase: 'unlocked' };
   emitAuth();
+  resetAutoLockTimer();
   return {
     publicKey,
     npub: nip19.npubEncode(publicKey),
@@ -302,6 +311,7 @@ export async function migratePlainToEncrypted(password: string): Promise<string>
   storedCredential = ncryptsec;
   authState = { phase: 'unlocked' };
   emitAuth();
+  resetAutoLockTimer();
   return ncryptsec;
 }
 
@@ -321,8 +331,60 @@ export function lock(): void {
   nip42Lib.bindAuthContext(null);
   sessionStorage.removeItem('nostr_filesync_session_pw');
   sessionStorage.removeItem('nostr_filesync_keep_session');
+  clearAutoLockTimer();
   authState = { phase: 'locked' };
   emitAuth();
+}
+
+let autoLockTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearAutoLockTimer(): void {
+  if (autoLockTimer !== null) {
+    clearTimeout(autoLockTimer);
+    autoLockTimer = null;
+  }
+}
+
+export function resetAutoLockTimer(): void {
+  clearAutoLockTimer();
+  const { ms } = passkey.getAutoLockDuration();
+  if (ms === null) return;
+  autoLockTimer = setTimeout(() => {
+    lock();
+    autoLockTimer = null;
+  }, ms);
+}
+
+export function startAutoLockTimer(): void {
+  if (authState.phase !== 'unlocked') return;
+  resetAutoLockTimer();
+}
+
+export function getAutoLockDuration() {
+  return passkey.getAutoLockDuration();
+}
+
+export function setAutoLockDuration(key: string): void {
+  passkey.setAutoLockDuration(key);
+  if (authState.phase === 'unlocked') {
+    resetAutoLockTimer();
+  }
+}
+
+export function isAutoLockActive(): boolean {
+  return autoLockTimer !== null;
+}
+
+export async function unlockWithPasskey(credentialId?: string): Promise<{ keyMaterial: Uint8Array; credentialId: string }> {
+  return passkey.unlockWithPasskey(credentialId);
+}
+
+export function listPasskeys(): passkey.PasskeyInfo[] {
+  return passkey.listPasskeys();
+}
+
+export function isPasskeySupported(): boolean {
+  return passkey.isPasskeySupported();
 }
 
 export function getNsec(): string | null {
