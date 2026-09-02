@@ -1,4 +1,4 @@
-import { SimplePool, finalizeEvent, getPublicKey, nip19, type NostrEvent } from 'nostr-tools';
+import { SimplePool, finalizeEvent, getPublicKey, nip19, type NostrEvent, type EventTemplate, type VerifiedEvent } from 'nostr-tools';
 import * as nip49 from 'nostr-tools/nip49';
 import * as nip42Lib from './nip42';
 import * as passkey from './passkey';
@@ -398,6 +398,21 @@ export function getNcryptsec(): string | null {
 
 export function getNpub(): string | null {
   return publicKey ? nip19.npubEncode(publicKey) : null;
+}
+
+export function signEventWithKey(
+  sec: Uint8Array,
+  event: EventTemplate
+): VerifiedEvent {
+  return finalizeEvent(event, sec);
+}
+
+export async function signAndPublish(
+  event: EventTemplate
+): Promise<number> {
+  if (!privateKey) throw new Error('Não autenticado');
+  const signed = finalizeEvent(event, privateKey);
+  return publishEvent(signed);
 }
 
 const connectionListeners = new Set<(info: ConnectionInfo) => void>();

@@ -1,6 +1,5 @@
 import * as db from '../db';
 import * as nostr from '../nostr';
-import * as crypto from '../crypto';
 import { nip44, type NostrEvent, type EventTemplate, type VerifiedEvent } from 'nostr-tools';
 
 export const KIND_SHARE = 30077;
@@ -184,7 +183,7 @@ export async function createShare(
 
   let signedEvent: VerifiedEvent;
   try {
-    signedEvent = await nostr.createSignerInternal(keys.privateKey);
+    signedEvent = nostr.signEventWithKey(keys.privateKey, eventTemplate);
   } catch (e) {
     throw new Error(`Falha ao assinar evento de compartilhamento: ${(e as Error).message}`);
   }
@@ -253,11 +252,8 @@ export async function discoverIncomingShares(): Promise<ShareRecord[]> {
       relays,
       {
         kinds: [KIND_SHARE],
-        tags: {
-          p: [keys.publicKey],
-        },
         limit: 100,
-      },
+      } as any,
       { maxWait: 10000 }
     );
 
@@ -266,6 +262,9 @@ export async function discoverIncomingShares(): Promise<ShareRecord[]> {
     for (const event of events) {
       const senderPubkey = event.pubkey;
       if (!senderPubkey || !keys.privateKey) continue;
+
+      const pTag = event.tags.find((t) => t[0] === 'p');
+      if (!pTag || pTag[1] !== keys.publicKey) continue;
 
       try {
         const conversationKey = nip44.getConversationKey(
@@ -391,8 +390,8 @@ export async function revokeShare(shareId: string): Promise<void> {
   };
 
   try {
-    const signedEvent = await nostr.createSignerInternal(keys.privateKey);
-    await nostr.publishEvent(signedEvent as NostrEvent);
+    const signedEvent = nostr.signEventWithKey(keys.privateKey, deleteEvent);
+    await nostr.publishEvent(signedEvent);
   } catch (e) {
     throw new Error(`Falha ao revogar compartilhamento: ${(e as Error).message}`);
   }
@@ -405,7 +404,7 @@ export async function revokeShare(shareId: string): Promise<void> {
   }
 }
 
-export async function removeShareRecord(shareId: string): Promise<boolean> {
+export function removeShareRecord(shareId: string): boolean {
   const shares = getSharesFromStorage();
   const filtered = shares.filter((s) => s.id !== shareId);
   if (filtered.length === shares.length) return false;
