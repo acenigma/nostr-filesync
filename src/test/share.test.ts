@@ -23,6 +23,7 @@ describe('Share Service - Storage Management', () => {
     createdAt: 1000,
     accepted: false,
     revoked: false,
+    isFolder: false,
   };
 
   function saveShare(s: share.ShareRecord): void {
@@ -84,6 +85,84 @@ describe('Share Service - Storage Management', () => {
     it('retorna false para ID inexistente', () => {
       expect(share.removeShareRecord('nonexistent')).toBe(false);
     });
+  });
+});
+
+describe('Share Service - Expiration (7.6)', () => {
+  it('isShareExpired retorna false quando não há expiresAt', () => {
+    const s: share.ShareRecord = {
+      id: 's1', fileId: 'f1', fileName: 'f', folderId: null,
+      contentHash: 'a', size: 0, mimeType: '', sharedBy: 'a',
+      sharedWith: 'b', permission: 'viewer', eventId: 'e1',
+      createdAt: 0, accepted: false, revoked: false, isFolder: false,
+    };
+    expect(share.isShareExpired(s)).toBe(false);
+  });
+
+  it('isShareExpired retorna true quando expiresAt passado', () => {
+    const s: share.ShareRecord = {
+      id: 's1', fileId: 'f1', fileName: 'f', folderId: null,
+      contentHash: 'a', size: 0, mimeType: '', sharedBy: 'a',
+      sharedWith: 'b', permission: 'viewer', eventId: 'e1',
+      createdAt: 0, expiresAt: Date.now() - 1000,
+      accepted: false, revoked: false, isFolder: false,
+    };
+    expect(share.isShareExpired(s)).toBe(true);
+  });
+
+  it('isShareExpired retorna false quando expiresAt futuro', () => {
+    const s: share.ShareRecord = {
+      id: 's1', fileId: 'f1', fileName: 'f', folderId: null,
+      contentHash: 'a', size: 0, mimeType: '', sharedBy: 'a',
+      sharedWith: 'b', permission: 'viewer', eventId: 'e1',
+      createdAt: 0, expiresAt: Date.now() + 60000,
+      accepted: false, revoked: false, isFolder: false,
+    };
+    expect(share.isShareExpired(s)).toBe(false);
+  });
+});
+
+describe('Share Service - Share Link (7.5)', () => {
+  it('parseShareLink retorna null para URL inválida', () => {
+    expect(share.parseShareLink('not-a-link')).toBeNull();
+    expect(share.parseShareLink('http://example.com')).toBeNull();
+    expect(share.parseShareLink('nostrsync://wronghost/event123')).toBeNull();
+  });
+
+  it('generateShareLink cria link valido', () => {
+    const s: share.ShareRecord = {
+      id: 'shr-abc-123', fileId: 'f1', fileName: 'f', folderId: null,
+      contentHash: 'a', size: 0, mimeType: '', sharedBy: 'a'.repeat(64),
+      sharedWith: 'b'.repeat(64), permission: 'viewer', eventId: 'evt-1',
+      createdAt: 0, accepted: false, revoked: false, isFolder: false,
+    };
+    const shares = [{
+      ...s,
+      id: s.id, eventId: s.eventId, sharedBy: s.sharedBy, sharedWith: s.sharedWith,
+      fileId: s.fileId, fileName: s.fileName, folderId: s.folderId,
+      contentHash: s.contentHash, size: s.size, mimeType: s.mimeType,
+      permission: s.permission, createdAt: s.createdAt, expiresAt: s.expiresAt,
+      accepted: s.accepted, revoked: s.revoked, isFolder: false,
+    }];
+    localStorage.setItem(share.SHARE_RECORD_KEY, JSON.stringify(shares));
+
+    const link = share.generateShareLink('shr-abc-123');
+    expect(link.startsWith('nostrsync://share/evt-1')).toBe(true);
+    expect(link.includes('from=' + 'a'.repeat(64))).toBe(true);
+    expect(link.includes('id=shr-abc-123')).toBe(true);
+  });
+
+  it('parseShareLink extrai dados corretos', () => {
+    const link = 'nostrsync://share/evt-999?from=aaaa&b=cccc&id=shr-xyz';
+    const parsed = share.parseShareLink(link);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.eventId).toBe('evt-999');
+    expect(parsed?.from).toBe('aaaa');
+    expect(parsed?.shareId).toBe('shr-xyz');
+  });
+
+  it('parseShareLink retorna null para link incompleto', () => {
+    expect(share.parseShareLink('nostrsync://share/evt-999')).toBeNull();
   });
 });
 

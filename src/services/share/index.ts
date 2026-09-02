@@ -24,15 +24,16 @@ export interface ShareRecord {
   expiresAt?: number;
   accepted: boolean;
   revoked: boolean;
+  isFolder: boolean;
 }
 
 interface EncryptedSharePayload {
-  fileId: string;
-  fileName: string;
-  folderId: string | null;
-  contentHash: string;
-  size: number;
-  mimeType: string;
+  fileId?: string;
+  folderId?: string;
+  fileName?: string;
+  contentHash?: string;
+  size?: number;
+  mimeType?: string;
   permission: Permission;
   nonce?: string;
   expiresAt?: number;
@@ -54,6 +55,7 @@ interface ShareStoreRecord {
   expiresAt?: number;
   accepted: boolean;
   revoked: boolean;
+  isFolder: boolean;
 }
 
 function getSharesFromStorage(): ShareStoreRecord[] {
@@ -87,6 +89,7 @@ export function listShares(): ShareRecord[] {
     expiresAt: s.expiresAt,
     accepted: s.accepted,
     revoked: s.revoked,
+    isFolder: s.isFolder,
   }));
 }
 
@@ -110,13 +113,14 @@ export function getShare(id: string): ShareRecord | null {
     expiresAt: found.expiresAt,
     accepted: found.accepted,
     revoked: found.revoked,
+    isFolder: found.isFolder,
   };
 }
 
 export function getIncomingShares(): ShareRecord[] {
   const pub = nostr.getKeys().publicKey;
   if (!pub) return [];
-  return listShares().filter((s) => s.sharedWith === pub && !s.revoked);
+  return listShares().filter((s) => s.sharedWith === pub && !s.revoked && !isShareExpired(s));
 }
 
 export function getOutgoingShares(): ShareRecord[] {
@@ -150,7 +154,7 @@ export async function createShare(
   const payload: EncryptedSharePayload = {
     fileId: file.fileId,
     fileName: file.name,
-    folderId: file.folderId,
+    folderId: file.folderId ?? undefined,
     contentHash: file.contentHash,
     size: file.size,
     mimeType: file.mimeType,
@@ -209,6 +213,7 @@ export async function createShare(
     expiresAt,
     accepted: false,
     revoked: false,
+    isFolder: false,
   };
 
   const shares = getSharesFromStorage();
@@ -231,6 +236,7 @@ export async function createShare(
     expiresAt,
     accepted: false,
     revoked: false,
+    isFolder: false,
   };
 }
 
@@ -284,22 +290,26 @@ export async function discoverIncomingShares(): Promise<ShareRecord[]> {
         const dTag = event.tags.find((t) => t[0] === 'd');
         const shareId = dTag ? dTag[1] : event.id;
 
+        const folderTag = event.tags.find((t) => t[0] === 'folder');
+        const isFolder = !!folderTag;
+
         const record: ShareStoreRecord = {
           id: shareId,
           eventId: event.id,
           sharedBy: senderPubkey,
           sharedWith: keys.publicKey,
-          fileId: payload.fileId,
-          fileName: payload.fileName,
-          folderId: payload.folderId,
-          contentHash: payload.contentHash,
-          size: payload.size,
-          mimeType: payload.mimeType,
+          fileId: payload.fileId ?? '',
+          fileName: payload.fileName ?? '',
+          folderId: payload.folderId ?? (folderTag ? folderTag[1] : null) ?? null,
+          contentHash: payload.contentHash ?? '',
+          size: payload.size ?? 0,
+          mimeType: payload.mimeType ?? '',
           permission: payload.permission,
           createdAt: event.created_at * 1000,
           expiresAt,
           accepted: !!getSharesFromStorage().find((s) => s.eventId === event.id),
           revoked: false,
+          isFolder,
         };
 
         shares.push(record);
@@ -410,4 +420,191 @@ export function removeShareRecord(shareId: string): boolean {
   if (filtered.length === shares.length) return false;
   saveSharesToStorage(filtered);
   return true;
+}
+
+export function isShareExpired(share: ShareRecord): boolean {
+  return share.expiresAt !== undefined && share.expiresAt < Date.now();
+}
+
+export function generateShareLink(shareId: string): string {
+  const share = getShare(shareId);
+  if (!share) throw new Error(`Share não encontrada: ${shareId}`);
+  return `nostrsync://share/${share.eventId}?from=${share.sharedBy}&id=${shareId}`;
+}
+
+export function parseShareLink(link: string): { eventId: string; from: string; shareId: string } | null {
+  try {
+    const url = new URL(link);
+    if (url.protocol !== 'nostrsync:') return null;
+    if (url.hostname !== 'share') return null;
+    const eventId = url.pathname.slice(1);
+    const from = url.searchParams.get('from');
+    const shareId = url.searchParams.get('id');
+    if (!eventId || !from || !shareId) return null;
+    return { eventId, from, shareId };
+  } catch {
+    return null;
+  }
+}
+
+export async function acceptShareFromLink(
+  link: string,
+  targetFolderId: string | null = null
+): Promise<db.FileRecord | db.FolderRecord | null> {
+  const parsed = parseShareLink(link);
+  if (!parsed) throw new Error('Link de compartilhamento inválido');
+
+  const shares = getSharesFromStorage();
+  const share = shares.find((s) => s.id === parsed.shareId);
+  if (!share) {
+    throw new Error('Compartilhamento não encontrado localmente. Execute descoberta primeiro.');
+  }
+
+  if (share.isFolder) {
+    return acceptFolderShare(parsed.shareId, targetFolderId);
+  }
+  return acceptShare(parsed.shareId, targetFolderId);
+}
+
+export async function shareFolder(
+  folderId: string,
+  recipientPubkey: string,
+  permission: Permission = 'viewer',
+  expiresInMs?: number
+): Promise<ShareRecord> {
+  const keys = nostr.getKeys();
+  if (!keys.privateKey) {
+    throw new Error('Usuário não autenticado. Desbloqueie primeiro.');
+  }
+  if (!keys.publicKey) {
+    throw new Error('Public key não disponível');
+  }
+
+  const folder = await db.get<db.FolderRecord>(db.STORE_FOLDERS, folderId);
+  if (!folder) {
+    throw new Error(`Pasta não encontrada: ${folderId}`);
+  }
+
+  const shareId = `shr-folder-${folderId}-${Date.now()}`;
+  const expiresAt = expiresInMs ? Date.now() + expiresInMs : undefined;
+
+  const payload: EncryptedSharePayload = {
+    folderId: folder.id,
+    fileName: folder.name,
+    permission,
+    expiresAt,
+  };
+
+  const conversationKey = nip44.getConversationKey(keys.privateKey, recipientPubkey);
+  const encryptedContent = nip44.encrypt(
+    JSON.stringify(payload),
+    conversationKey
+  );
+
+  const tags: string[][] = [
+    ['p', recipientPubkey],
+    ['folder', folder.id],
+    ['d', shareId],
+  ];
+
+  if (expiresAt) {
+    tags.push(['expiration', Math.floor(expiresAt / 1000).toString()]);
+  }
+
+  const eventTemplate: EventTemplate = {
+    kind: KIND_SHARE,
+    content: encryptedContent,
+    tags,
+    created_at: Math.floor(Date.now() / 1000),
+  };
+
+  const signedEvent = nostr.signEventWithKey(keys.privateKey, eventTemplate);
+  const eventId = await nostr.publishEvent(signedEvent);
+  if (eventId === 0) {
+    throw new Error('Falha ao publicar evento de compartilhamento de pasta');
+  }
+
+  const record: ShareStoreRecord & { isFolder: boolean } = {
+    id: shareId,
+    eventId: signedEvent.id,
+    sharedBy: keys.publicKey,
+    sharedWith: recipientPubkey,
+    fileId: '',
+    fileName: folder.name,
+    folderId: folder.id,
+    contentHash: '',
+    size: 0,
+    mimeType: 'application/vnd.folder',
+    permission,
+    createdAt: Date.now(),
+    expiresAt,
+    accepted: false,
+    revoked: false,
+    isFolder: true,
+  };
+
+  const shares = getSharesFromStorage();
+  shares.push(record as ShareStoreRecord);
+  saveSharesToStorage(shares);
+
+  return {
+    id: shareId,
+    fileId: '',
+    fileName: folder.name,
+    folderId: folder.id,
+    contentHash: '',
+    size: 0,
+    mimeType: 'application/vnd.folder',
+    sharedBy: keys.publicKey,
+    sharedWith: recipientPubkey,
+    permission,
+    eventId: signedEvent.id,
+    createdAt: Date.now(),
+    expiresAt,
+    accepted: false,
+    revoked: false,
+    isFolder: true,
+  };
+}
+
+export async function acceptFolderShare(
+  shareId: string,
+  targetParentId: string | null = null
+): Promise<db.FolderRecord> {
+  const share = getShare(shareId);
+  if (!share) {
+    throw new Error(`Share não encontrada: ${shareId}`);
+  }
+  if (!share.isFolder) {
+    throw new Error('Esta share não é uma pasta');
+  }
+  if (share.expiresAt && share.expiresAt < Date.now()) {
+    throw new Error('Este convite de compartilhamento expirou');
+  }
+
+  const existing = await db.get<db.FolderRecord>(db.STORE_FOLDERS, share.folderId!);
+  if (existing) {
+    throw new Error('Esta pasta já existe na sua biblioteca');
+  }
+
+  const now = Date.now();
+  const folder: db.FolderRecord = {
+    id: share.folderId!,
+    parentId: targetParentId,
+    name: share.fileName,
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+  };
+
+  await db.put(db.STORE_FOLDERS, folder);
+
+  const shares = getSharesFromStorage();
+  const idx = shares.findIndex((s) => s.id === shareId);
+  if (idx >= 0) {
+    shares[idx] = { ...shares[idx], accepted: true };
+    saveSharesToStorage(shares);
+  }
+
+  return folder;
 }
