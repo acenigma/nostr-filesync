@@ -1,0 +1,12 @@
+.mobile-resource-indicator {
+  position: sticky;
+  top: 0;
+  z-index: 49;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
+  border-bottom: 1px solid rgba(107, 114, 128, 0.3);
+}

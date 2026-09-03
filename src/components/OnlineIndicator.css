@@ -1,0 +1,31 @@
+.online-indicator {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  animation: slideIn 0.2s ease-out;
+}
+
+.online-indicator.offline {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.online-indicator.reconnected {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border-bottom: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}

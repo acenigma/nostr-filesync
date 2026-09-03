@@ -86,6 +86,53 @@ export default defineConfig({
               },
             },
           },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-files',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365,
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|avif|ico)$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'images-cache',
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/.*\.(?:nostrbundle|json)$/i,
+            handler: 'NetworkOnly',
+            options: {
+              backgroundSync: {
+                name: 'bundle-queue',
+                options: { maxRetentionTime: 24 * 60 },
+              },
+            },
+          },
+          {
+            urlPattern: /\/api\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              networkTimeoutSeconds: 5,
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60,
+              },
+            },
+          },
         ],
         clientsClaim: true,
         skipWaiting: true,

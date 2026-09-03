@@ -45,6 +45,9 @@ export default function Settings({ onClose }: Props) {
   const [bunkerInput, setBunkerInput] = useState('');
   const [bunkerBusy, setBunkerBusy] = useState(false);
   const [bunkerInfo, setBunkerInfo] = useState<string | null>(null);
+  const [autoLockDuration, setAutoLockDuration] = useState(
+    () => nostr.getAutoLockDuration().key
+  );
 
   const importFormat = useMemo<DetectedFormat | null>(
     () => detectFormat(importInput),
@@ -570,6 +573,70 @@ export default function Settings({ onClose }: Props) {
           <button className="text-btn danger" onClick={handleLock}>
             🔒 Bloquear agora
           </button>
+
+          <div className="auto-lock-row">
+            <label>Auto-lock após</label>
+            <select
+              className="lock-duration-select"
+              value={autoLockDuration}
+              onChange={(e) => {
+                const key = e.target.value;
+                nostr.setAutoLockDuration(key);
+                setAutoLockDuration(key);
+              }}
+            >
+              <option value="never">Nunca</option>
+              <option value="5min">5 min</option>
+              <option value="15min">15 min</option>
+              <option value="30min">30 min</option>
+              <option value="1hour">1 hora</option>
+            </select>
+          </div>
+
+          {nostr.isPasskeySupported() && (
+            <button
+              className="text-btn"
+              onClick={async () => {
+                const passkeys = await nostr.listPasskeys();
+                if (passkeys.length > 0) {
+                  setSuccess('Passkeys registrados. Use no desbloqueio.');
+                } else {
+                  setSuccess('Nenhuma passkey registrada.');
+                }
+              }}
+            >
+              Gerenciar passkeys
+            </button>
+          )}
+        </section>
+
+        <section className="settings-section">
+          <h3>Backup &amp; Recuperação</h3>
+          <div className="backup-actions">
+            <button
+              className="text-btn"
+              onClick={async () => {
+                try {
+                  const pw = prompt('Senha para backup:');
+                  if (!pw) return;
+                  const bytes = await nostr.exportBundleFile(pw);
+                  const ab = new ArrayBuffer(bytes.byteLength);
+                  new Uint8Array(ab).set(bytes);
+                  const blob = new Blob([ab], { type: 'application/octet-stream' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'backup.nostrbundle';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch (e) {
+                  setError(`Export falhou: ${e}`);
+                }
+              }}
+            >
+              Exportar backup
+            </button>
+          </div>
         </section>
 
         {showScanner && (

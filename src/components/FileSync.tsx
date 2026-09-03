@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import * as nostr from '../services/nostr';
+import * as shareService from '../services/share';
 import type { FileHeaders, FileRecord } from '../services/filesync';
 import Thumbnail from './Thumbnail';
 import PreviewModal from './PreviewModal';
@@ -43,6 +45,7 @@ export default function FileSync({ onProgress }: FileSyncProps = {}) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set(['']));
   const [uploadPath, setUploadPath] = useState('');
   const [previewIdx, setPreviewIdx] = useState<number | null>(null);
+  const [sharedFileIds, setSharedFileIds] = useState<Set<string>>(new Set());
 
   const previewable = useMemo(() => {
     const list = files.filter(
@@ -81,6 +84,36 @@ export default function FileSync({ onProgress }: FileSyncProps = {}) {
       }
     }
     await handleFiles(e.dataTransfer.files, uploadPath);
+  };
+
+  const onShare = async (f: FileRecord | FileHeaders) => {
+    const recipient = prompt(
+      'Public key Nostr (npub ou hex de 64 chars) do destinatário (ou vazio para self-share):'
+    );
+    if (recipient === null) return;
+    let recipientPubkey = recipient.trim();
+    if (!recipientPubkey) {
+      recipientPubkey = nostr.getKeys().publicKey ?? '';
+    }
+    if (!recipientPubkey) {
+      setError('Destinatário inválido');
+      return;
+    }
+    try {
+      const share = await shareService.createShare(f.fileId, recipientPubkey);
+      const link = shareService.generateShareLink(share.id);
+      await navigator.clipboard.writeText(link);
+      setSharedFileIds((prev) => new Set(prev).add(f.fileId));
+      setTimeout(() => {
+        setSharedFileIds((prev) => {
+          const next = new Set(prev);
+          next.delete(f.fileId);
+          return next;
+        });
+      }, 5000);
+    } catch (e) {
+      setError(`Share falhou: ${e}`);
+    }
   };
 
   const filteredFiles = useMemo(() => {
@@ -261,6 +294,8 @@ export default function FileSync({ onProgress }: FileSyncProps = {}) {
             const idx = previewable.findIndex((f) => f.fileId === file.fileId);
             if (idx >= 0) setPreviewIdx(idx);
           }}
+          onShare={onShare}
+          sharedFileIds={sharedFileIds}
         />
       ) : (
         <FlatList
@@ -271,6 +306,8 @@ export default function FileSync({ onProgress }: FileSyncProps = {}) {
             const idx = previewable.findIndex((f) => f.fileId === file.fileId);
             if (idx >= 0) setPreviewIdx(idx);
           }}
+          onShare={onShare}
+          sharedFileIds={sharedFileIds}
         />
       )}
 
@@ -295,9 +332,11 @@ interface TreeViewProps {
   onDownload: (f: FileRecord | FileHeaders) => void;
   onDelete: (f: FileRecord | FileHeaders) => void;
   onPreview: (f: FileRecord | FileHeaders) => void;
+  onShare: (f: FileRecord | FileHeaders) => void;
+  sharedFileIds: Set<string>;
 }
 
-function TreeView({ tree, expanded, onToggle, onDownload, onDelete, onPreview }: TreeViewProps) {
+function TreeView({ tree, expanded, onToggle, onDownload, onDelete, onPreview, onShare, sharedFileIds }: TreeViewProps) {
   const { t } = useT();
   if (!tree.folders.length && !tree.files.length) {
     return (
@@ -319,7 +358,7 @@ function TreeView({ tree, expanded, onToggle, onDownload, onDelete, onPreview }:
               <span className="folder-count">{folder.fileCount + folder.folderCount}</span>
             </button>
             {isOpen && (
-              <div className="folder-contents">
+      <div className="folder-contents">
                 <TreeView
                   tree={folder}
                   expanded={expanded}
@@ -327,6 +366,8 @@ function TreeView({ tree, expanded, onToggle, onDownload, onDelete, onPreview }:
                   onDownload={onDownload}
                   onDelete={onDelete}
                   onPreview={onPreview}
+                  onShare={onShare}
+                  sharedFileIds={sharedFileIds}
                 />
               </div>
             )}
@@ -340,6 +381,8 @@ function TreeView({ tree, expanded, onToggle, onDownload, onDelete, onPreview }:
           onDownload={onDownload}
           onDelete={onDelete}
           onPreview={onPreview}
+          onShare={onShare}
+          isShared={sharedFileIds.has(file.fileId)}
         />
       ))}
     </ul>
@@ -351,9 +394,11 @@ interface FlatListProps {
   onDownload: (f: FileRecord | FileHeaders) => void;
   onDelete: (f: FileRecord | FileHeaders) => void;
   onPreview: (f: FileRecord | FileHeaders) => void;
+  onShare: (f: FileRecord | FileHeaders) => void;
+  sharedFileIds: Set<string>;
 }
 
-function FlatList({ files, onDownload, onDelete, onPreview }: FlatListProps) {
+function FlatList({ files, onDownload, onDelete, onPreview, onShare, sharedFileIds }: FlatListProps) {
   const { t } = useT();
   if (!files.length) {
     return (
@@ -371,6 +416,8 @@ function FlatList({ files, onDownload, onDelete, onPreview }: FlatListProps) {
           onDownload={onDownload}
           onDelete={onDelete}
           onPreview={onPreview}
+          onShare={onShare}
+          isShared={sharedFileIds.has(file.fileId)}
         />
       ))}
     </ul>
@@ -382,9 +429,11 @@ interface FileRowProps {
   onDownload: (f: FileRecord | FileHeaders) => void;
   onDelete: (f: FileRecord | FileHeaders) => void;
   onPreview: (f: FileRecord | FileHeaders) => void;
+  onShare: (f: FileRecord | FileHeaders) => void;
+  isShared: boolean;
 }
 
-function FileRow({ file, onDownload, onDelete, onPreview }: FileRowProps) {
+function FileRow({ file, onDownload, onDelete, onPreview, onShare, isShared }: FileRowProps) {
   const { t } = useT();
   const isPreviewable =
     !!file.type && (file.type.startsWith('image/') || file.type.startsWith('video/'));
@@ -417,6 +466,13 @@ function FileRow({ file, onDownload, onDelete, onPreview }: FileRowProps) {
           title={t('downloading')}
         >
           ⬇
+        </button>
+        <button
+          className={`action-btn share ${isShared ? 'shared' : ''}`}
+          onClick={() => onShare(file)}
+          title="Compartilhar"
+        >
+          {isShared ? '🔗' : '🔗'}
         </button>
         <button
           className="action-btn delete"

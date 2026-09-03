@@ -2,13 +2,19 @@ import { useState, useEffect, useRef } from 'react';
 import * as nostr from './services/nostr';
 import * as filesync from './services/filesync';
 import * as uploadState from './services/uploadState';
+import * as swMessaging from './services/swMessaging';
+import * as backgroundSync from './services/backgroundSync';
 import TodoList from './components/TodoList';
 import FileSync from './components/FileSync';
 import Unlock from './components/Unlock';
 import Settings from './components/Settings';
+import InstallPrompt from './components/InstallPrompt';
+import OnlineIndicator from './components/OnlineIndicator';
+import MobileResourceIndicator from './components/MobileResourceIndicator';
 import { useTheme } from './hooks/useTheme';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useT } from './hooks/useT';
+import { usePWAInstall } from './hooks/usePWAInstall';
 import './App.css';
 
 type View = 'sync' | 'todo';
@@ -23,14 +29,43 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [npub, setNpub] = useState('');
   const [globalProgress, setGlobalProgress] = useState<{ pct: number; label: string } | null>(null);
+  const [showInstall, setShowInstall] = useState(false);
   const { theme, toggle: toggleTheme } = useTheme();
   const { t } = useT();
+  const { installable, installed } = usePWAInstall();
   const viewRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (authPhase !== 'unlocked') return;
+    backgroundSync.startBackgroundSync();
+    return () => backgroundSync.stopBackgroundSync();
+  }, [authPhase]);
+
+  useEffect(() => {
+    swMessaging.initServiceWorkerMessaging();
+    const off = swMessaging.onSwMessage((msg) => {
+      if (msg.type === 'SYNC_NOW') {
+        filesync.resumePendingUploads().catch(() => {});
+      }
+    });
+    return off;
+  }, []);
 
   useEffect(() => {
     filesync.migrateFilesFromLegacy().catch(() => {});
     uploadState.migrateFromLegacy().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (authPhase !== 'unlocked') return;
+    if (installed) return;
+    const dismissed = sessionStorage.getItem('nostr_filesync_install_dismissed');
+    if (dismissed) return;
+    const t = setTimeout(() => {
+      if (installable && !installed) setShowInstall(true);
+    }, 30000);
+    return () => clearTimeout(t);
+  }, [authPhase, installable, installed]);
 
   useEffect(() => {
     const unsubAuth = nostr.onAuthChange((s) => {
@@ -110,6 +145,16 @@ function App() {
           {t('nav_tasks')}
         </button>
         <div className="nav-spacer" />
+        {installable && !installed && (
+          <button
+            className="nav-icon-btn"
+            onClick={() => setShowInstall(true)}
+            title="Instalar app"
+            aria-label="Instalar app"
+          >
+            📲
+          </button>
+        )}
         <button
           className="nav-icon-btn"
           onClick={toggleTheme}
@@ -130,10 +175,20 @@ function App() {
       <div className="app-npub" title={npub}>
         {npub.slice(0, 12)}…{npub.slice(-6)}
       </div>
+      <OnlineIndicator />
+      <MobileResourceIndicator />
       <div ref={viewRef} className="view-root">
         <ViewSlot view={view} onProgress={setGlobalProgress} />
       </div>
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+      {showInstall && (
+        <InstallPrompt
+          onClose={() => {
+            sessionStorage.setItem('nostr_filesync_install_dismissed', '1');
+            setShowInstall(false);
+          }}
+        />
+      )}
     </div>
   );
 }

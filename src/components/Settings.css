@@ -224,6 +224,34 @@
   margin-top: 8px;
 }
 
+.auto-lock-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.auto-lock-row label {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.lock-duration-select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 13px;
+}
+
+.backup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .reveal-form {
   display: flex;
   gap: 8px;

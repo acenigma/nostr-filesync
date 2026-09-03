@@ -1,0 +1,81 @@
+.install-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 20px;
+}
+
+.install-prompt-card {
+  position: relative;
+  background: var(--bg);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 24px 24px;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.install-prompt-card h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+}
+
+.install-prompt-desc {
+  color: var(--text);
+  font-size: 14px;
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.install-prompt-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.install-prompt-close:hover {
+  background: var(--hover, rgba(255, 255, 255, 0.05));
+}
+
+.install-prompt-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.ios-instructions {
+  text-align: left;
+  background: var(--accent-bg, rgba(170, 59, 255, 0.05));
+  border: 1px solid var(--accent-border, rgba(170, 59, 255, 0.3));
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.ios-instructions .hint {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 8px;
+}
+
+.ios-instructions button {
+  margin-top: 12px;
+  width: 100%;
+}

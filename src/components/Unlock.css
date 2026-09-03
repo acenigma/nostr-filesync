@@ -87,6 +87,18 @@
   cursor: not-allowed;
 }
 
+.unlock-btn.passkey-btn {
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  margin-top: 12px;
+}
+
+.unlock-btn.passkey-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: white;
+}
+
 .unlock-error {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.4);

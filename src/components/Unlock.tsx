@@ -124,6 +124,18 @@ export default function Unlock() {
     }
   };
 
+  const handleUnlockPasskey = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      await nostr.unlockWithPasskey();
+    } catch (e) {
+      setError(`Passkey unlock falhou: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleMigrate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -328,6 +340,16 @@ export default function Unlock() {
                   {busy ? t('unlock_unlocking') : t('unlock_unlock_with_phrase')}
                 </button>
               </form>
+            )}
+            {nostr.isPasskeySupported() && nostr.hasPasskeyBackup() && (
+              <button
+                type="button"
+                className="unlock-btn passkey-btn"
+                onClick={() => void handleUnlockPasskey()}
+                disabled={busy}
+              >
+                🔑 Desbloquear com Passkey
+              </button>
             )}
             <p className="unlock-hint">{t('unlock_session_hint')}</p>
             <div className="unlock-divider">{t('unlock_or')}</div>

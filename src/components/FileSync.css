@@ -191,6 +191,17 @@
   color: #ef4444;
 }
 
+.action-btn.share:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.action-btn.share.shared {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
 .empty-state {
   text-align: center;
   padding: 40px 20px;

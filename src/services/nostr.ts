@@ -4,6 +4,15 @@ import * as nip42Lib from './nip42';
 import * as passkey from './passkey';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
+import {
+  exportBundle,
+  importBundle,
+  validateBundle,
+  type BundleExportOptions,
+  type BundleImportOptions,
+  type ExportResult,
+  type ImportResult,
+} from './bundle';
 
 const FALLBACK_RELAYS: string[] = [
   'wss://relay.primal.net',
@@ -688,4 +697,34 @@ function hexToBytes(hex: string): Uint8Array {
     bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
   }
   return bytes;
+}
+
+export async function exportBundleFile(
+  password: string,
+  options?: Partial<Omit<BundleExportOptions, 'password'>>
+): Promise<Uint8Array> {
+  const result: ExportResult = await exportBundle({ password, ...options });
+  return result.bundle;
+}
+
+export async function importBundleFile(
+  data: Blob | ArrayBuffer | Uint8Array,
+  password: string,
+  options?: Partial<Omit<BundleImportOptions, 'password'>>
+): Promise<ImportResult> {
+  let bytes: Uint8Array;
+  if (data instanceof Uint8Array) bytes = data;
+  else if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+  else bytes = new Uint8Array(await data.arrayBuffer());
+  return importBundle(bytes, { password, ...options });
+}
+
+export async function validateBundleFile(
+  data: Blob | ArrayBuffer | Uint8Array
+): Promise<{ valid: boolean; reason?: string }> {
+  let bytes: Uint8Array;
+  if (data instanceof Uint8Array) bytes = data;
+  else if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+  else bytes = new Uint8Array(await data.arrayBuffer());
+  return validateBundle(bytes);
 }
