@@ -83,6 +83,27 @@
   color: var(--text-h);
 }
 
+.nav-bell-btn {
+  position: relative;
+}
+
+.nav-bell-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
 .app-npub {
   font-family: var(--mono);
   font-size: 11px;
@@ -90,6 +111,13 @@
   opacity: 0.6;
   margin-bottom: 8px;
   cursor: help;
+}
+
+.view-loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text);
+  opacity: 0.6;
 }
 
 .init-loading,

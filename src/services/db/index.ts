@@ -1,5 +1,5 @@
 export const DB_NAME = 'nostr-filesync';
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;
 
 export const STORE_FILES = 'files';
 export const STORE_UPLOADS = 'uploads';
@@ -11,6 +11,7 @@ export const STORE_DEVICES = 'devices';
 export const STORE_BLOBS = 'blobs';
 export const STORE_FILE_VERSIONS = 'file_versions';
 export const STORE_TRASH = 'trash';
+export const STORE_NOTIFICATIONS = 'notifications';
 
 export const SCHEMA_VERSION_FILES = 2;
 export const SCHEMA_VERSION_UPLOADS = 1;
@@ -229,6 +230,17 @@ const migrations: Migration[] = [
         store.createIndex('entityType', 'entityType', { unique: false });
         store.createIndex('entityId', 'entityId', { unique: false });
         store.createIndex('deletedAt', 'deletedAt', { unique: false });
+      }
+    },
+  },
+  {
+    version: 9,
+    up: (db: IDBDatabase): void => {
+      if (!db.objectStoreNames.contains(STORE_NOTIFICATIONS)) {
+        const store = db.createObjectStore(STORE_NOTIFICATIONS, { keyPath: 'id' });
+        store.createIndex('status', 'status', { unique: false });
+        store.createIndex('category', 'category', { unique: false });
+        store.createIndex('createdAt', 'createdAt', { unique: false });
       }
     },
   },

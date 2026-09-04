@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import * as nostr from '../services/nostr';
 import * as filesync from '../services/filesync';
 import * as uploadState from '../services/uploadState';
+import * as notifications from '../services/notifications';
 import type { FileHeaders, FileRecord, DownloadProgress } from '../services/filesync';
 import type { UploadState } from '../services/uploadState';
 import { useT } from './useT';
@@ -183,10 +184,21 @@ export function useFileSync(options?: { onProgress?: (p: { pct: number; label: s
       try {
         await filesync.deleteRemoteFile(file as FileHeaders);
         await filesync.deleteLocalFile(file.fileId);
+        await notifications.notifyFileEvent({
+          type: 'deleted',
+          fileId: file.fileId,
+          fileName: file.name,
+        });
         await refresh();
       } catch (e) {
         console.error('Falha ao excluir', e);
         setError(tRef.current('delete_failed', { msg: (e as Error).message }));
+        await notifications.notifySyncEvent({
+          type: 'sync-error',
+          message: `Falha ao excluir ${file.name}: ${(e as Error).message}`,
+          fileId: file.fileId,
+          fileName: file.name,
+        });
       }
     },
     [refresh]

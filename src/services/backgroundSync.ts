@@ -1,5 +1,6 @@
 import * as filesync from './filesync';
 import * as swMessaging from './swMessaging';
+import * as notifications from './notifications';
 
 export type BackgroundSyncStatus = 'idle' | 'running' | 'paused-offline' | 'error';
 
@@ -93,17 +94,35 @@ async function runOnce(): Promise<void> {
       lastError = null;
       consecutiveFailures = 0;
       status = 'idle';
+      if (totalRuns === 1) {
+        await notifications.notifySyncEvent({
+          type: 'sync-recovered',
+          message: 'Pendências sincronizadas',
+        });
+      }
     } else {
       const failed = results.filter((r) => !r.ok);
       lastError = failed[0]?.error || 'unknown';
       consecutiveFailures++;
       status = 'error';
+      if (consecutiveFailures === 1) {
+        await notifications.notifySyncEvent({
+          type: 'sync-error',
+          message: `${failed.length} operação(ões) falharam: ${lastError}`,
+        });
+      }
     }
     persist();
   } catch (e) {
     lastError = (e as Error).message || String(e);
     consecutiveFailures++;
     status = 'error';
+    if (consecutiveFailures === 1) {
+      await notifications.notifySyncEvent({
+        type: 'sync-error',
+        message: lastError,
+      });
+    }
     persist();
   } finally {
     emit();

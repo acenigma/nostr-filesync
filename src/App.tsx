@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import * as nostr from './services/nostr';
 import * as filesync from './services/filesync';
 import * as uploadState from './services/uploadState';
 import * as swMessaging from './services/swMessaging';
 import * as backgroundSync from './services/backgroundSync';
-import TodoList from './components/TodoList';
-import FileSync from './components/FileSync';
+import * as notifications from './services/notifications';
 import Unlock from './components/Unlock';
-import Settings from './components/Settings';
 import InstallPrompt from './components/InstallPrompt';
 import OnlineIndicator from './components/OnlineIndicator';
 import MobileResourceIndicator from './components/MobileResourceIndicator';
@@ -16,6 +14,11 @@ import { useShortcuts } from './hooks/useShortcuts';
 import { useT } from './hooks/useT';
 import { usePWAInstall } from './hooks/usePWAInstall';
 import './App.css';
+
+const FileSync = lazy(() => import('./components/FileSync'));
+const TodoList = lazy(() => import('./components/TodoList'));
+const Settings = lazy(() => import('./components/Settings'));
+const NotificationCenter = lazy(() => import('./components/NotificationCenter'));
 
 type View = 'sync' | 'todo';
 
@@ -27,9 +30,11 @@ function App() {
     return v === 'todo' ? 'todo' : 'sync';
   });
   const [showSettings, setShowSettings] = useState(false);
+  const [showNotif, setShowNotif] = useState(false);
   const [npub, setNpub] = useState('');
   const [globalProgress, setGlobalProgress] = useState<{ pct: number; label: string } | null>(null);
   const [showInstall, setShowInstall] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const { theme, toggle: toggleTheme } = useTheme();
   const { t } = useT();
   const { installable, installed } = usePWAInstall();
@@ -39,6 +44,15 @@ function App() {
     if (authPhase !== 'unlocked') return;
     backgroundSync.startBackgroundSync();
     return () => backgroundSync.stopBackgroundSync();
+  }, [authPhase]);
+
+  useEffect(() => {
+    if (authPhase !== 'unlocked') return;
+    void notifications.getUnreadCount().then(setUnreadCount);
+    const off = notifications.onNotificationsChange((all) => {
+      setUnreadCount(all.filter((n) => n.status === 'unread').length);
+    });
+    return off;
   }, [authPhase]);
 
   useEffect(() => {
@@ -145,6 +159,15 @@ function App() {
           {t('nav_tasks')}
         </button>
         <div className="nav-spacer" />
+        <button
+          className="nav-icon-btn nav-bell-btn"
+          onClick={() => setShowNotif(true)}
+          title="Notificações"
+          aria-label="Notificações"
+        >
+          🔔
+          {unreadCount > 0 && <span className="nav-bell-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+        </button>
         {installable && !installed && (
           <button
             className="nav-icon-btn"
@@ -178,9 +201,20 @@ function App() {
       <OnlineIndicator />
       <MobileResourceIndicator />
       <div ref={viewRef} className="view-root">
-        <ViewSlot view={view} onProgress={setGlobalProgress} />
+        <Suspense fallback={<div className="view-loading">Carregando...</div>}>
+          <ViewSlot view={view} onProgress={setGlobalProgress} />
+        </Suspense>
       </div>
-      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <Suspense fallback={null}>
+          <Settings onClose={() => setShowSettings(false)} />
+        </Suspense>
+      )}
+      {showNotif && (
+        <Suspense fallback={null}>
+          <NotificationCenter onClose={() => setShowNotif(false)} />
+        </Suspense>
+      )}
       {showInstall && (
         <InstallPrompt
           onClose={() => {

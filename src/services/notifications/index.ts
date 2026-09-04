@@ -20,13 +20,7 @@ export interface AppNotification {
 
 const STORE_NOTIFICATIONS = 'notifications';
 
-let initialized = false;
 let listeners: Array<(n: AppNotification[]) => void> = [];
-
-function ensureStore(): void {
-  if (initialized) return;
-  initialized = true;
-}
 
 function genId(): string {
   return `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -37,7 +31,6 @@ function sortByDate(a: AppNotification, b: AppNotification): number {
 }
 
 async function loadAll(): Promise<AppNotification[]> {
-  await db.ensureReady();
   const items = await db.getAll<AppNotification>(STORE_NOTIFICATIONS);
   return items.sort(sortByDate);
 }
@@ -57,8 +50,6 @@ export interface CreateNotificationInput {
 }
 
 export async function createNotification(input: CreateNotificationInput): Promise<AppNotification> {
-  ensureStore();
-  await db.ensureReady();
   const n: AppNotification = {
     id: genId(),
     category: input.category,
@@ -89,13 +80,16 @@ export async function listNotifications(filter?: {
   return all;
 }
 
+export async function get(id: string): Promise<AppNotification | undefined> {
+  return db.get<AppNotification>(STORE_NOTIFICATIONS, id);
+}
+
 export async function getUnreadCount(): Promise<number> {
   const all = await loadAll();
   return all.filter((n) => n.status === 'unread').length;
 }
 
 export async function markAsRead(id: string): Promise<void> {
-  await db.ensureReady();
   const n = await db.get<AppNotification>(STORE_NOTIFICATIONS, id);
   if (!n) return;
   if (n.status === 'unread') {
@@ -123,7 +117,6 @@ export async function markAllAsRead(): Promise<number> {
 }
 
 export async function archive(id: string): Promise<void> {
-  await db.ensureReady();
   const n = await db.get<AppNotification>(STORE_NOTIFICATIONS, id);
   if (!n) return;
   n.status = 'archived';
@@ -149,13 +142,11 @@ export async function archiveAll(): Promise<number> {
 }
 
 export async function deleteNotification(id: string): Promise<void> {
-  await db.ensureReady();
   await db.del(STORE_NOTIFICATIONS, id);
   await emit();
 }
 
 export async function clearAll(): Promise<void> {
-  await db.ensureReady();
   await db.clear(STORE_NOTIFICATIONS);
   await emit();
 }

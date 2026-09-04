@@ -83,10 +83,26 @@ PWA (Progressive Web App) que sincroniza **arquivos** e **tarefas** entre dispos
 
 ### PWA
 
-- Service Worker com cache de fontes Google
+- Service Worker com cache de fontes Google, imagens, páginas e APIs
 - Manifest instalável (ícones 192/512, maskable)
-- Funciona offline (após primeiro carregamento)
+- **Prompt de instalação** com instruções específicas para iOS (Safari)
+- **Indicador online/offline** + auto-sync ao reconectar
+- **Background sync** com retry exponencial (5s → 5min), pausa offline, persistência de estado
 - `workbox` com cleanup automático de caches antigos
+
+### Notificações
+
+- **Notification Center** in-app com abas Não lidas / Lidas / Arquivadas
+- Eventos: novo arquivo, nova versão, conflito, erro de sync, sync recuperada
+- **Browser Notifications API** com pedido de permissão e `tag`/`icon`/`onclick`
+- Persistência em IndexedDB (store `notifications`, migration v9)
+- Marcar como lida, arquivar, excluir (individual e em massa)
+
+### Mobile
+
+- **Detecção de bateria** (Battery Status API) e **network info** (effective type, RTT, save-data)
+- **Auto-defer de uploads** pesados em bateria baixa / conexões lentas (2g, save-data, 3g com RTT > 500ms)
+- **Lazy image loading** com IntersectionObserver (rootMargin 200px)
 
 ## Estrutura
 
@@ -183,3 +199,4 @@ Para rodar localmente: `npm test` (single run) ou `npm run test:watch`.
 - Uploads em background: fechar a aba durante um upload grande aborta o chunk atual (estado fica salvo para retomada)
 - Relays podem reter ou censurar eventos (mitigação: replicar em N relays)
 - NIP-46 não está totalmente integrado ao fluxo de assinatura de eventos do app (por ora é configuração/setup; eventos ainda são assinados pela chave local)
+- **Push remoto** (Fase 11.4): ainda não implementado. Service Worker sozinho não fornece push remoto; é necessário NIP-?? específico para relays Nostr ou servidor Web Push dedicado. Por ora, notificações funcionam via `Notification` API local disparada por polling de eventos.

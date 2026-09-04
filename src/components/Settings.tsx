@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import * as nostr from '../services/nostr';
 import * as nip46 from '../services/nip46';
+import { getBandwidthConfig, setBandwidthProfile } from '../services/bandwidth';
 import QRCode from 'qrcode';
 import QRScanner from './QRScanner';
 import MnemonicSetup from './MnemonicSetup';
@@ -47,6 +48,9 @@ export default function Settings({ onClose }: Props) {
   const [bunkerInfo, setBunkerInfo] = useState<string | null>(null);
   const [autoLockDuration, setAutoLockDuration] = useState(
     () => nostr.getAutoLockDuration().key
+  );
+  const [bandwidthProfile, setBandwidthProfileState] = useState(
+    () => getBandwidthConfig().profile
   );
 
   const importFormat = useMemo<DetectedFormat | null>(
@@ -608,6 +612,31 @@ export default function Settings({ onClose }: Props) {
               Gerenciar passkeys
             </button>
           )}
+        </section>
+
+        <section className="settings-section">
+          <h3>Performance</h3>
+          <div className="auto-lock-row">
+            <label>Limite de banda</label>
+            <select
+              className="lock-duration-select"
+              value={bandwidthProfile}
+              onChange={(e) => {
+                const profile = e.target.value as 'unlimited' | 'high' | 'medium' | 'low';
+                setBandwidthProfile(profile);
+                setBandwidthProfileState(profile);
+              }}
+            >
+              <option value="unlimited">Ilimitado (6 paralelos)</option>
+              <option value="high">Alto (4 paralelos)</option>
+              <option value="medium">Médio (2 paralelos)</option>
+              <option value="low">Baixo (1 paralelo)</option>
+            </select>
+          </div>
+          <p className="settings-hint">
+            Reduz paralelismo em conexões lentas ou instáveis. CDC é usado para deduplicar
+            conteúdo que já existe nos relays.
+          </p>
         </section>
 
         <section className="settings-section">

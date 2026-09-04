@@ -260,8 +260,8 @@ describe('db.ts — Versionamento e Migrations', () => {
     } as unknown as IDBDatabase;
   }
 
-  it('DB_VERSION é 8', () => {
-    expect(db.DB_VERSION).toBe(8);
+  it('DB_VERSION é 9', () => {
+    expect(db.DB_VERSION).toBe(9);
   });
 
   it('exports STORE_FOLDERS e STORE_TOMBSTONES', () => {
@@ -406,7 +406,7 @@ describe('db.ts — Versionamento e Migrations', () => {
   });
 
   it('migrations lista está correta', () => {
-    expect(db.migrations.length).toBe(7);
+    expect(db.migrations.length).toBe(8);
     expect(db.migrations[0].version).toBe(2);
     expect(db.migrations[1].version).toBe(3);
     expect(db.migrations[2].version).toBe(4);
@@ -414,5 +414,6 @@ describe('db.ts — Versionamento e Migrations', () => {
     expect(db.migrations[4].version).toBe(6);
     expect(db.migrations[5].version).toBe(7);
     expect(db.migrations[6].version).toBe(8);
+    expect(db.migrations[7].version).toBe(9);
   });
 });
