@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, lazy, Suspense } from 'react';
 import * as nostr from '../services/nostr';
 import * as nip46 from '../services/nip46';
 import { getBandwidthConfig, setBandwidthProfile } from '../services/bandwidth';
@@ -9,6 +9,8 @@ import { useT } from '../hooks/useT';
 import { setLocale, getLocale } from '../hooks/useT';
 import { SUPPORTED_LOCALES, LOCALE_LABELS } from '../i18n';
 import './Settings.css';
+
+const DiagnosticsPanel = lazy(() => import('./DiagnosticsPanel'));
 
 type DetectedFormat = 'nsec' | 'ncryptsec' | 'hex' | 'mnemonic' | 'invalid';
 
@@ -52,6 +54,7 @@ export default function Settings({ onClose }: Props) {
   const [bandwidthProfile, setBandwidthProfileState] = useState(
     () => getBandwidthConfig().profile
   );
+  const [showDiag, setShowDiag] = useState(false);
 
   const importFormat = useMemo<DetectedFormat | null>(
     () => detectFormat(importInput),
@@ -612,6 +615,13 @@ export default function Settings({ onClose }: Props) {
               Gerenciar passkeys
             </button>
           )}
+
+          <button
+            className="text-btn"
+            onClick={() => setShowDiag(true)}
+          >
+            🩺 Diagnóstico &amp; Reparo
+          </button>
         </section>
 
         <section className="settings-section">
@@ -692,6 +702,12 @@ export default function Settings({ onClose }: Props) {
 
         {revealedMnemonic && (
           <MnemonicSetup mnemonic={revealedMnemonic} onConfirm={closeMnemonicView} />
+        )}
+
+        {showDiag && (
+          <Suspense fallback={null}>
+            <DiagnosticsPanel onClose={() => setShowDiag(false)} />
+          </Suspense>
         )}
       </div>
     </div>
