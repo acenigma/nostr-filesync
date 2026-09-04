@@ -6,6 +6,10 @@ export function bindAuthContext(sec: Uint8Array | null): void {
   privateKeyRef = sec;
 }
 
+export function isReady(): boolean {
+  return privateKeyRef !== null;
+}
+
 export async function handleAuth(evt: EventTemplate): Promise<VerifiedEvent> {
   if (!privateKeyRef) {
     throw new Error('Não autenticado para responder ao challenge do relay');

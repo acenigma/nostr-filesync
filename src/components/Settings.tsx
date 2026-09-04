@@ -11,6 +11,7 @@ import { SUPPORTED_LOCALES, LOCALE_LABELS } from '../i18n';
 import './Settings.css';
 
 const DiagnosticsPanel = lazy(() => import('./DiagnosticsPanel'));
+const BlossomServersPanel = lazy(() => import('./BlossomServersPanel'));
 
 type DetectedFormat = 'nsec' | 'ncryptsec' | 'hex' | 'mnemonic' | 'invalid';
 
@@ -676,6 +677,19 @@ export default function Settings({ onClose }: Props) {
               Exportar backup
             </button>
           </div>
+        </section>
+
+        <section className="settings-section">
+          <h3>Servidores Blossom (storage descentralizado)</h3>
+          <p className="settings-hint">
+            Blossom armazena o conteúdo criptografado dos arquivos grandes em servidores públicos
+            gratuitos (sem cadastro, auth via NIP-42). Arquivos menores continuam indo via relay.
+          </p>
+          <Suspense
+            fallback={<div className="settings-hint">Carregando servidores...</div>}
+          >
+            <BlossomServersPanel />
+          </Suspense>
         </section>
 
         {showScanner && (

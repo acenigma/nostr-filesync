@@ -1,160 +1,311 @@
 # Nostr FileSync
 
-PWA (Progressive Web App) que sincroniza **arquivos** e **tarefas** entre dispositivos via relays Nostr, com identidade local criptografada e suporte offline.
+PWA (Progressive Web App) que sincroniza **arquivos** e **tarefas** entre dispositivos via relays Nostr, com identidade local criptografada, versionamento, deduplicação por conteúdo, compartilhamento seguro, backup/recuperação, busca, notificações e suporte offline completo.
 
 ## Stack
 
 - **React 19** + **Vite 8** + **TypeScript 7** + **OxLint**
 - **nostr-tools** (NIP-19, NIP-42, NIP-44, NIP-46, NIP-49, NIP-65)
 - **@scure/bip39** (mnemônico BIP-39)
-- **IndexedDB** (nativo, via wrapper próprio) para metadados persistentes
-- **vite-plugin-pwa** (Service Worker + manifest)
-- **Web Crypto** (AES-256-GCM, SHA-256, XChaCha20-Poly1305 via NIP-49)
+- **IndexedDB** (DB_VERSION=9) com 10 stores versionadas e migrações numeradas
+- **vite-plugin-pwa** + Workbox (Service Worker, runtime caching, background sync)
+- **Web Crypto** (AES-256-GCM, SHA-256, XChaCha20-Poly1305 via NIP-49, PBKDF2)
+- **Web Workers** (SHA-256 off-main-thread)
+- **WebAuthn / PRF** (passkey unlock com derivação de chave)
 - **Vitest 4** + jsdom + @testing-library/react + fake-indexeddb (testes)
+- 893 testes em 56 arquivos
 
 ## Funcionalidades
 
 ### Identidade e autenticação
 
-- Criação de identidade Nostr local com **mnemônico BIP-39 de 12 palavras** + senha
+- Identidade Nostr local com **mnemônico BIP-39 de 12 palavras** + senha
 - Importação via `nsec1...`, `ncryptsec1...`, hex 64 chars ou mnemônico
 - Criptografia local da chave privada via **NIP-49** (XChaCha20-Poly1305, KDF Argon2)
-- Backup recuperável do mnemônico real (cifrado com a mesma senha)
-- Migração automática de identidades salvas em texto claro (nsec) para criptografadas
-- Bloqueio automático (`lock()`); logout zera a chave em memória
-- Confirmação obrigatória antes de sobrescrever identidade existente
-- **NIP-42 auth**: relays autenticados (responde automaticamente a challenges com eventos assinados)
-- **NIP-46 remote signer**: conectar a um bunker externo via `bunker://` ou `nostrconnect://` URL (Settings → Remote signer)
+- Backup recuperável do mnemônico (cifrado com a mesma senha)
+- Migração automática de identidades em texto claro para criptografadas
+- Bloqueio automático (`lock()`) configurável: nunca / 5min / 15min / 30min / 1h
+- **Passkey (WebAuthn + PRF)**: registrar, autenticar, listar, renomear, remover; `unlockWithPasskey()` deriva chave via HKDF
+- **NIP-42 auth**: auto-resposta a challenges de relays autenticados
+- **NIP-46 remote signer**: conectar a bunker via `bunker://` ou `nostrconnect://`
+- **Signers** (abstração `Signer` interface): `LocalSigner` e `NIP07Signer` + factory `createSigner`
 
 ### Arquivos (Nostr FileSync)
 
 - Upload de arquivos grandes (chunked em 64 KB, kind 1063/1064)
-- **Criptografia AES-256-GCM** com chave aleatória por arquivo, envelopeada via **NIP-44 self-wrap**
+- **Criptografia AES-256-GCM** com chave aleatória por arquivo, envelopeada via **NIP-44**
 - **Compressão gzip** automática quando reduz ≥ 2%
-- **Deduplicação por hash** (sha256 do plaintext + nome + tamanho)
-- Organização em pastas (tag `path`)
-- **Drag-drop de pastas** (via `webkitGetAsEntry` API; estrutura preservada como `path`)
-- Upload de arquivos ou diretórios inteiros via botão "choose files" (com `webkitdirectory` quando suportado). Quando um diretório é selecionado, a estrutura interna é preservada e os arquivos são organizados automaticamente em subpastas correspondentes
+- **Deduplicação por hash** (sha256 do plaintext + nome + tamanho) — blobs compartilhados entre arquivos
+- **Modelo de pastas hierárquicas** (`parentId`, `version`) em vez de path
+- Drag-drop de arquivos e pastas (via `webkitGetAsEntry` API)
 - Download com verificação de integridade por hash
-- Deleção remota (kind 5 com `k=1063`)
-- **Thumbnails lazy** para `image/*` e `video/*` (via `IntersectionObserver`, cancelamento via AbortController)
+- Deleção via **tombstones** sincronizados (kind 5 com `k=1063`)
+- **Thumbnails lazy** com `IntersectionObserver` + cancelamento via AbortController
 - **Preview fullscreen** com navegação prev/next (teclado: Esc/←/→)
 - Visualização em árvore de pastas ou lista plana
 - Busca por nome ou pasta
-- Drag-and-drop de arquivos
-- Indicador global de progresso no topo (3px, accent color)
+- Indicador global de progresso
 
-### Tarefas (Nostr Todo)
+### Versionamento e histórico
 
-- Lista de tarefas (kind 30000, parameterizable replaceable)
-- Checkbox de conclusão
-- Deleção (kind 5 com referência ao event id)
-- Sincronização em tempo real via `subscribeMany`
-- Validação de payload (`text: string`, `done: boolean`)
+- `createVersion()`, `getVersion()`, `listVersions()`, `getLatestVersion()`
+- `restoreVersion()` (cria nova versão, não destrói histórico)
+- `deleteVersions()`, `getFileVersions()`
+- Version metadata com `parentVersionId`, `contentHash`, `createdBy`
 
-### Sincronização e relays
+### Lixeira e retenção
 
-- Lista de relays do usuário via **NIP-65** (kind 10002), filtrada por marker `write` (mantém read+write e read-only)
-- Cache de relay list com TTL de 10 minutos
-- Fallback para 5 relays públicos quando o usuário não publicou NIP-65
-- Pool único reutilizado entre views (`SimplePool` do `nostr-tools`)
-- Retry com backoff exponencial para publicação
-- Status de conexão em tempo real (`connectedRelays` populado por `pingRelays`)
-- Subscription robusta: cleanup fecha a subscription mesmo se ela ainda estiver inicializando
+- **Trash** store dedicada (`store_trash`) para entidades excluídas
+- `deleteFolder(id, { permanent: false })` move para lixeira
+- `restoreVersion` + restore from trash
+- **Retention policies** configuráveis: 30 dias / 90 dias / 1 ano / indefinido
+- Garbage collector com **mark → grace period → verify references → delete**
 
-### Persistência local
+### Sincronização (Sync Engine)
 
-- **IndexedDB** (`nostr-filesync` database, version 1) com stores `files` e `uploads`
-- Migração silenciosa de `localStorage` → IDB na primeira execução
-- Fallback de leitura por uma release (defesa em profundidade)
-- Estado de uploads pendentes preservado entre sessões (retomada automática)
-- Pruning automático de uploads > 7 dias
+- **Sync queue persistente** no IndexedDB com tipos: `CREATE / UPDATE / MOVE / RENAME / DELETE / RESTORE / UPLOAD / DOWNLOAD`
+- **Retry** com **exponential backoff** (jitter, max 5 tentativas, falha permanente)
+- **Cursor de sincronização** por `${pubkey}:${relayUrl}` — evita reprocessar histórico
+- **Device registry** com `pubkey`, `name`, `platform`, `capabilities`, `lastSeen`
+- **Device discovery** via relays (separado de file sync)
+- **Manifest** versionado com entries
+- **Delta sync** (manifest local vs remoto, diff mínimo)
+- **Pull/Push** com queue local, validação, mark synced
+- **Conflitos** detectados por `version`; estratégias: `KEEP_BOTH`, `LAST_WRITE_WINS`, `MANUAL`
+- **Tombstone sync** — propagação de exclusões entre dispositivos
+- **Repair** — `rebuildIndex`, `rebuildManifest`, `retryFailed`, `checkIntegrity`
+- **Background sync** com retry persistente (5s → 5min), pausa offline, re-sync ao reconectar
 
-### UX
+### Integridade e armazenamento (Content-addressed)
 
-- **i18n**: pt-BR, en, es (seletor em Settings → Aparência, persistência em localStorage, fallback para `navigator.language`)
-- **Tema dark/light** com toggle manual (☀/☾), persistência em `localStorage`, fallback para `prefers-color-scheme`
-- Sem flash no boot (tema aplicado inline em `main.tsx`)
-- **Atalhos de teclado**: `n` foca input de nova tarefa (view todo), `/` foca busca (view sync), `Esc` fecha Settings
-- Cancelamento de uploads/downloads via `AbortController` ao desmontar componentes
-- Settings: exportar nsec/ncryptsec/mnemonic via QR, alterar senha, atualizar relays, conectar bunker NIP-46
-- QR Scanner para importar chaves via câmera
-- Mensagens de erro claras e contextuais
+- `sha256(content)` como identificador do blob
+- `createBlobRef`, `verifyBlob`, `findFilesByBlobHash`
+- `computeDedupStats()` — total blobs, refs, taxa de dedup, bytes economizados
+- **IntegrityScanner** (`services/diagnostics/integrity.ts`): hash, tamanho, chunks, metadata, referências
+- **Garbage Collector** (`services/diagnostics/gc.ts`): mark → grace period → verify refs → delete
 
-### PWA
+### Backup e recuperação (bundles .nostrbundle)
 
-- Service Worker com cache de fontes Google, imagens, páginas e APIs
-- Manifest instalável (ícones 192/512, maskable)
-- **Prompt de instalação** com instruções específicas para iOS (Safari)
-- **Indicador online/offline** + auto-sync ao reconectar
-- **Background sync** com retry exponencial (5s → 5min), pausa offline, persistência de estado
-- `workbox` com cleanup automático de caches antigos
+- Formato próprio `.nostrbundle` com header (versão, salt, KDF, parameters) + payload criptografado
+- Inclui: identidade, configuração, relays, folders, files, metadata, versions, sync state, refs de conteúdo
+- **Criptografia**: PBKDF2 (100k iterações) + AES-256-GCM
+- **Manifest de integridade** com checksums por tipo de entidade (folders, files, fileVersions, devices, syncQueue, syncCursors, blobs, relays, config, identity)
+- `computeManifest()` + `verifyManifest()` para validação
+- `BUNDLE_VERSION=2`, `CRYPTO_VERSION=1`, `SCHEMA_VERSION=1`
+- `exportBundle()`, `importBundle()`, `validateBundle()`, `parseBundleHeader()`, `formatBundleSize()`
+
+### Compartilhamento seguro (NIP-44)
+
+- `createShare(fileId, recipientPubkey, permission, expiresInMs?)`
+- `discoverIncomingShares()` descobre shares via relays
+- `acceptShare(shareId, targetFolderId)`, `acceptShareFromLink(link)`
+- `revokeShare(shareId)` via kind:5 (delete event)
+- `shareFolder()`, `acceptFolderShare()` — pastas inteiras
+- Permissões: `viewer` / `editor` / `owner`
+- `generateShareLink()` / `parseShareLink()` → `nostrsync://share/{eventId}?from={npub}&id={shareId}`
+- Expiração configurável (1h / 1d / 7d / 30d / never)
+
+### Busca e organização
+
+- `searchMetadata({ query, mimeType, size, dateRange, tags })` — busca por nome, pasta, MIME, tamanho, data, tags
+- **Índice invertido** (`term → files`) com `buildInvertedIndex`, `searchWithIndex`, `refreshSearchIndex`, `clearSearchIndex`
+- Tokenizer para busca full-text
+- **Favoritos**: `favoriteFile`, `favoriteFolder`, `unfavorite`, `isFavorited`, `listFavorites()`
+- 📌 Preferências locais por dispositivo
 
 ### Notificações
 
 - **Notification Center** in-app com abas Não lidas / Lidas / Arquivadas
-- Eventos: novo arquivo, nova versão, conflito, erro de sync, sync recuperada
-- **Browser Notifications API** com pedido de permissão e `tag`/`icon`/`onclick`
-- Persistência em IndexedDB (store `notifications`, migration v9)
+- `recordEvent(category, level, message, meta?)` — buffer circular de 500 eventos
+- `notifyFileEvent({ type, fileId, fileName })` — eventos `new-file | new-version | deleted | restored`
+- `notifySyncEvent({ type, message })` — eventos `sync-error | sync-recovered | conflict | queued | completed`
+- **Browser Notifications** API com permission flow + tag/icon/onclick → deep link
+- Persistência em IndexedDB (store `notifications`, v9)
 - Marcar como lida, arquivar, excluir (individual e em massa)
+
+### Armazenamento (Storage management)
+
+- `getStorageEstimate()` via `navigator.storage.estimate()`
+- `getStorageAlert()` com níveis: 80% (aviso) / 90% (crítico) / 95% (restrição)
+- `setStorageState`, `getStorageState`, `clearStorageStates`
+- Ações explícitas (sem auto-delete): limpar cache, limpar thumbnails, remover offline
+- Sempre com confirmação para ações destrutivas
+
+### Diagnóstico e observabilidade
+
+- **Diagnostics service** com categorias: relay / upload / download / sync / system
+- Níveis: debug / info / warn / error
+- **Relay health** com score (successRate × 0.7 + latencyFactor × 0.3), EMA de latência (α=0.3)
+- `recordRelaySuccess(url, latencyMs)`, `recordRelayFailure(url, error, latencyMs?)`
+- **Repair tools**: `checkIntegrity()`, `rebuildIndex()`, `rebuildManifest()`, `retryFailed()`, `runAllRepairs()`
+- **Export diagnostics** → `diagnostics-YYYY-MM-DD.json` com version, app, stats, events, relays
+- **DiagnosticsPanel** in-app: 3 tabs (Eventos / Relays / Reparo) com 4 stat cards
+- Configurações → "🩺 Diagnóstico & Reparo"
 
 ### Mobile
 
-- **Detecção de bateria** (Battery Status API) e **network info** (effective type, RTT, save-data)
-- **Auto-defer de uploads** pesados em bateria baixa / conexões lentas (2g, save-data, 3g com RTT > 500ms)
-- **Lazy image loading** com IntersectionObserver (rootMargin 200px)
+- **Battery Status API**: `useBattery()` — nível, carregando, lowPower (< 20%)
+- **Network Information API**: `useNetworkInfo()` — effectiveType, RTT, saveData, downlink
+- **Auto-defer** de uploads pesados em: offline / save-data / 2g / slow-2g / 3g com RTT > 500ms / bateria baixa
+- **Lazy image loading** com `IntersectionObserver` (rootMargin 200px)
+- **MobileResourceIndicator** banner
+
+### PWA e Service Worker
+
+- Service Worker com **cache strategies** separadas:
+  - `NetworkFirst` (3s timeout) para navegação
+  - `NetworkFirst` (5s timeout) para `/api/*`
+  - `StaleWhileRevalidate` para imagens
+  - `CacheFirst` para fontes Google
+  - `NetworkOnly` + `BackgroundSyncPlugin` para `/sync/*`
+- Manifest instalável (ícones 192/512, maskable)
+- **Prompt de instalação** com modal + instruções específicas para iOS (Safari)
+- **Indicador online/offline** + auto-sync ao reconectar
+- **Background sync** com retry persistente, pausa offline
+- **Deep links** `?view=sync|todo` + `nostrsync://share/...` (parsing)
+- Workbox com cleanup automático de caches antigos
+- PWA shortcuts: `/?view=sync` e `/?view=todo`
+
+### Performance
+
+- **Code splitting** via `React.lazy()` + `Suspense`:
+  - Main chunk: 533KB → 432KB (gzip 175KB → 144KB)
+  - Lazy chunks: FileSync (17KB), Settings (63KB), TodoList (5KB), NotificationCenter (4KB), DiagnosticsPanel
+- **Web Worker** para SHA-256 (`workers/hashWorker.ts`) com fallback para `crypto.subtle`
+- **Upload scheduler** (`UploadScheduler`): combina bandwidth config + priority queue
+- **Bandwidth profiles**: unlimited (6 paralelos) / high (4) / medium (2) / low (1) — persistente em localStorage
+- **Adaptive chunk size**: baseado no tamanho do arquivo
+- **Priority queue** com 5 níveis: metadata < small-file < user-requested < background < thumbnail
+- **Content Defined Chunking (CDC)**: rolling hash + 12-bit mask, dedup por boundary, `estimateDedupRatio`
+- **Web Workers** para hash (off-main-thread) com fallback automático
+
+### UX
+
+- **i18n**: pt-BR, en, es (seletor em Settings, persistência em localStorage, fallback para `navigator.language`)
+- **Tema dark/light** com toggle manual, persistência, fallback para `prefers-color-scheme`
+- Sem flash no boot (tema aplicado inline em `main.tsx`)
+- **Atalhos de teclado**: `n` (foca todo), `/` (foca busca), `Esc` (fecha modais)
+- Cancelamento de uploads/downloads via AbortController
+- Settings: exportar nsec/ncryptsec/mnemonic via QR, alterar senha, atualizar relays, bunker NIP-46, export bundle, gerenciar passkeys, bandwidth, diagnóstico
+- QR Scanner para importar chaves via câmera
+- Mensagens de erro claras e contextuais
 
 ## Estrutura
 
 ```
 src/
-  main.tsx                    # bootstrap + tema inline (sem flash)
-  App.tsx                     # router view + theme + atalhos + indicador global
-
-  hooks/
-    useAbort.ts               # AbortController por componente
-    useTheme.ts               # tema dark/light
-    useShortcuts.ts           # atalhos de teclado com guard de foco
-    useT.ts                   # i18n (locale, dicionário, t())
-    useFileSync.ts            # estado + sync de arquivos (upload/download/subscriptions)
-    useTodoSync.ts            # estado + sync de tarefas
-
-  services/
-    db.ts                     # wrapper IndexedDB nativo (zero deps)
-    nostr.ts                  # identidade, relays (NIP-65), todos (kind 30000), pub/sub
-    filesync.ts               # upload/download criptografado, chunks, NIP-44
-    uploadState.ts            # estado de uploads pendentes (IDB)
-    nip42.ts                  # auto-resposta a challenges de relays autenticados
-    nip46.ts                  # remote signer via bunker
+  main.tsx                          # bootstrap + tema inline
+  App.tsx                           # router + theme + atalhos + lazy components
+  sw.ts                             # custom Service Worker (Workbox)
 
   components/
-    Unlock.tsx                # criar / desbloquear / importar
-    Settings.tsx              # exportar chave, alterar senha, relays, idioma, bunker
-    MnemonicSetup.tsx         # backup de 12 palavras
-    QRScanner.tsx             # câmera para QR codes
-    FileSync.tsx              # UI de arquivos (delega a useFileSync)
-    TodoList.tsx              # UI de tarefas (delega a useTodoSync)
-    Thumbnail.tsx             # preview lazy de image/video
-    PreviewModal.tsx          # preview fullscreen com navegação prev/next
+    Unlock.tsx                      # criar / desbloquear / importar (com passkey)
+    Settings.tsx                    # exportar chave, senha, relays, passkey, bundle, bw, diag
+    FileSync.tsx                    # UI de arquivos (lazy)
+    TodoList.tsx                    # UI de tarefas (lazy)
+    Thumbnail.tsx                   # preview lazy image/video
+    PreviewModal.tsx                # preview fullscreen com navegação
+    QRScanner.tsx                   # câmera para QR codes
+    MnemonicSetup.tsx               # backup de 12 palavras
+    InstallPrompt.tsx               # modal de instalação PWA (com iOS)
+    OnlineIndicator.tsx             # banner offline/online
+    MobileResourceIndicator.tsx     # banner de upload deferido
+    NotificationCenter.tsx          # center de notificações (lazy)
+    DiagnosticsPanel.tsx            # painel de diagnóstico (lazy)
+    DevicesPanel.tsx                # UI de devices descobertos
+
+  hooks/
+    useAbort.ts                     # AbortController por componente
+    useTheme.ts                     # tema dark/light
+    useShortcuts.ts                 # atalhos de teclado
+    useT.ts                         # i18n
+    useFileSync.ts                  # estado + sync de arquivos
+    useTodoSync.ts                  # estado + sync de tarefas
+    usePWAInstall.ts                # beforeinstallprompt + iOS detection
+    useOnlineStatus.ts              # online/offline + justCameOnline
+    useDeepLink.ts                  # parse nostrsync:// e ?view=
+    useBattery.ts                   # Battery Status API
+    useNetworkInfo.ts               # Network Information API
+    useMobileResourceState.ts       # combina battery + network
+    useLazyImage.ts                 # IntersectionObserver
+    useBrowserNotifications.ts      # Notification API + permission
+
+  services/
+    db/index.ts                     # IndexedDB v9 + 10 stores + migrations
+    filesync.ts                     # re-export './files'
+    files/                          # upload/download criptografado, chunks, NIP-44
+    file-entity/                    # FileRecord, FolderRecord, helpers
+    folders/                        # CRUD de pastas + tree
+    blobs/                          # content-addressed storage + dedup
+    blob-dedup                      # dedup helpers
+    blobs-storage                   # blob persistence
+    crypto/                         # AES, SHA-256, gzip, NIP-44
+    nostr/                          # identidade, relays, signers
+      index.ts                      # entry point
+      signer.ts                     # LocalSigner, NIP07Signer
+    nostr.ts                        # re-export
+    passkey/                        # WebAuthn + PRF + auto-lock
+    nip42.ts                        # auto-resposta a challenges
+    nip46.ts                        # remote signer via bunker
+    sync/                           # Sync Engine completo
+      states.ts                     # LOCAL_ONLY, PENDING_UPLOAD, etc
+      backoff.ts                    # exponential backoff + jitter
+      queue.ts                      # sync queue persistente
+      retry.ts                      # retry logic
+      cursor.ts                     # sync cursor
+      manifest.ts                   # manifest de arquivos
+      delta.ts                      # delta sync (diff)
+      pull.ts                       # pull sync
+      push.ts                       # push sync
+      conflicts.ts                  # detecção e resolução
+      tombstone-sync.ts             # propagação de tombstones
+      repair.ts                     # sync repair
+    tombstones/                     # Tombstone entity
+    trash/                          # lixeira
+    versions/                       # versionamento de arquivos
+    share/                          # NIP-44 share + folder share
+    notifications/                  # in-app notifications
+    search/                         # busca + favoritos + índice invertido
+    storage/                        # quota + alerts
+    diagnostics/                    # logs + relay health
+      index.ts                      # event buffer
+      integrity.ts                  # IntegrityScanner
+      gc.ts                         # Garbage Collector
+    repair/                         # repair tools
+    bundle/                         # .nostrbundle export/import
+    retention/                      # retention policies
+    devices/                        # device registry + discovery
+    migration/                      # path-to-folders migration
+      index.ts
+      path-to-folders.ts
+    tombstones.ts                   # re-export
+    uploadState.ts                  # estado de uploads pendentes
+    backgroundSync.ts               # background sync com backoff
+    bandwidth.ts                    # bandwidth profiles
+    priorityQueue.ts                # priority queue
+    uploadScheduler.ts              # scheduler combinado
+    cdc.ts                          # Content Defined Chunking
+    swMessaging.ts                  # SW ↔ app messaging
+    hashWorkerClient.ts             # Web Worker wrapper para SHA-256
+    filesync.ts                     # re-export
+    file-entity.ts                  # re-export
+    folders.ts                      # re-export
+    blobs.ts                        # re-export
+    migration.ts                    # re-export
+    tombstones.ts                   # re-export
+
+  workers/
+    hashWorker.ts                   # Web Worker para SHA-256
 
   i18n/
-    index.ts                  # detectLocale, getDictionary, interpolate
-    pt-BR.ts                  # dicionário português (chaves + valores)
-    en.ts                     # dicionário inglês
-    es.ts                     # dicionário espanhol
+    index.ts                        # detectLocale, getDictionary, interpolate
+    pt-BR.ts                        # português
+    en.ts                           # inglês
+    es.ts                           # espanhol
 
-  test/
-    setup.ts                  # polyfills jsdom (fake-indexeddb, localStorage, matchMedia)
-    credential.test.ts        # parse nsec/hex/mnemonic, NIP-65, validações
-    crypto.test.ts            # roundtrip AES, gzip, NIP-44, SHA-256
-    components.test.tsx       # smoke tests de Thumbnail e Unlock
-    useShortcuts.test.ts      # comportamento do hook de atalhos
-    db.test.ts                # IndexedDB: db.ts + uploadState + migrateFromLegacy
-    useFileSync.test.ts       # integração: hook com mocks de filesync/uploadState
-    useTodoSync.test.ts       # integração: hook com mocks de nostr (apply events via subscribe)
-
-vitest.config.ts              # config do Vitest
-vite.config.ts                # config do Vite + PWA
+  test/                             # 893 testes em 56 arquivos
+    setup.ts                        # polyfills jsdom
+    [50+ test files]                # coverage de todos os services e components
 ```
 
 ## Comandos
@@ -170,33 +321,44 @@ npm run test:watch     # Vitest em watch mode
 npm run test:coverage  # Vitest com cobertura (v8)
 ```
 
-## Testes
+## IndexedDB Schema (v9)
 
-**69 testes** em 7 arquivos. Cobertura foca em services críticos (parsing, crypto, NIP-65, NIP-42, NIP-44, IDB) e integração de hooks (useFileSync, useTodoSync) com mocks de `nostr-tools` e IndexedDB:
+Database `nostr-filesync` com 10 stores:
 
-- **credential.test.ts** (25): parse de nsec, hex, mnemônico (válido/inválido), validação de mnemônico, hasStoredCredential, parseTodoPayload, filtro NIP-65 (parseRelayTags)
-- **crypto.test.ts** (10): SHA-256, AES-GCM roundtrip + nonce aleatório + falha com chave errada, gzip roundtrip + ratio, NIP-44 self-wrap roundtrip, finalizeEvent
-- **components.test.tsx** (3): smoke do Thumbnail (ícone para PDF, image lazy) e Unlock (estado inicial)
-- **useShortcuts.test.ts** (7): tecla simples, modificadores ignorados, foco em input bloqueia (Escape não), guard `when()`, enabled=false, cleanup no unmount
-- **db.test.ts** (12): put/getAll/get/del/upsert/clear de IndexedDB; uploadState save/update/listPending/markComplete/migrateFromLegacy/pruneOld
-- **useFileSync.test.ts** (5): integração com mocks — carga inicial, onDelete, onClearPending, handleFiles success/error
-- **useTodoSync.test.ts** (7): integração com mocks — fetch inicial, addTodo, toggleTodo, deleteTodo, applyEvent via subscribe (kind 5 + kind 30000 válido e inválido)
-
-Para rodar localmente: `npm test` (single run) ou `npm run test:watch`.
+| Store | Key | Indexes | Migration |
+|-------|-----|---------|-----------|
+| `files` | `fileId` | — | v1 |
+| `uploads` | `fileId` | — | v1 |
+| `folders` | `id` | — | v2 |
+| `tombstones` | `entityId` | — | v2 |
+| `sync_queue` | `id` | status, nextAttemptAt, entityId | v3 |
+| `sync_cursors` | `id` | pubkey | v4 |
+| `devices` | `id` | pubkey, lastSeen | v5 |
+| `blobs` | `contentHash` | refCount, lastAccessedAt | v6 |
+| `file_versions` | `id` | fileId, contentHash, createdAt | v7 |
+| `trash` | `id` | entityType, entityId, deletedAt | v8 |
+| `notifications` | `id` | status, category, createdAt | v9 |
 
 ## Segurança
 
 - Chave privada nunca sai da memória sem criptografia NIP-49
 - Conteúdo dos arquivos cifrado com AES-256-GCM antes de publicar nos relays
-- Chave AES envelopeada via NIP-44 self-wrap (ECDHP entre si mesmo)
+- Chave AES envelopeada via NIP-44 (criptografia entre público e privado)
 - Mnemônico cifrado com a senha local, recuperável apenas pelo usuário
+- Passkey usa WebAuthn + PRF → HKDF → chave local (nunca sai do device)
 - Tokens sensíveis (`ncryptsec`, mnemônico cifrado) ficam em `localStorage`/IndexedDB do device — assumimos que o device é confiável
 - Sem servidor central: tudo passa por relays públicos do protocolo Nostr
+- Bundles `.nostrbundle` cifrados com PBKDF2 (100k) + AES-256-GCM
+- Shares usam NIP-44 (ECDH + ChaCha20 + HMAC-SHA256)
 
 ## Limitações conhecidas
 
 - Sem suporte a múltiplas contas simultâneas
-- Uploads em background: fechar a aba durante um upload grande aborta o chunk atual (estado fica salvo para retomada)
+- Uploads em background: fechar a aba aborta o chunk atual (estado salvo para retomada)
 - Relays podem reter ou censurar eventos (mitigação: replicar em N relays)
-- NIP-46 não está totalmente integrado ao fluxo de assinatura de eventos do app (por ora é configuração/setup; eventos ainda são assinados pela chave local)
-- **Push remoto** (Fase 11.4): ainda não implementado. Service Worker sozinho não fornece push remoto; é necessário NIP-?? específico para relays Nostr ou servidor Web Push dedicado. Por ora, notificações funcionam via `Notification` API local disparada por polling de eventos.
+- NIP-46: configuração/setup funciona, mas eventos ainda são assinados pela chave local
+- **Push remoto** (Fase 11.4): não implementado. SW sozinho não fornece push remoto; necessário NIP específico para Nostr ou Web Push server. Notificações funcionam via `Notification` API local disparada por polling de eventos
+- **Blossom / storage descentralizado** (Fase 14): ainda não implementado; arquivos binários vão via eventos Nostr (kind 1063/1064)
+- **CDC** ainda não está integrado ao pipeline de upload (apenas exposto como service)
+- **Versioning UI**: service completo, mas UI de listagem/restore de versões ainda não integrada ao FileSync
+- **Repair tools** funcionam mas dependem de IDB estar consistente

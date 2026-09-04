@@ -5,6 +5,8 @@ import * as uploadState from './services/uploadState';
 import * as swMessaging from './services/swMessaging';
 import * as backgroundSync from './services/backgroundSync';
 import * as notifications from './services/notifications';
+import * as blossomHealth from './services/blossom/healthScheduler';
+import * as blossom from './services/blossom';
 import Unlock from './components/Unlock';
 import InstallPrompt from './components/InstallPrompt';
 import OnlineIndicator from './components/OnlineIndicator';
@@ -43,7 +45,12 @@ function App() {
   useEffect(() => {
     if (authPhase !== 'unlocked') return;
     backgroundSync.startBackgroundSync();
-    return () => backgroundSync.stopBackgroundSync();
+    blossomHealth.startHealthScheduler();
+    void blossom.runHealthChecks();
+    return () => {
+      backgroundSync.stopBackgroundSync();
+      blossomHealth.stopHealthScheduler();
+    };
   }, [authPhase]);
 
   useEffect(() => {

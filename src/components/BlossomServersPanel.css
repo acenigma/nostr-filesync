@@ -1,0 +1,238 @@
+.blossom-panel {
+  width: 100%;
+}
+
+.blossom-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.blossom-stat {
+  background: var(--accent-bg, rgba(170, 59, 255, 0.05));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  text-align: center;
+}
+
+.blossom-stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.blossom-stat-label {
+  font-size: 11px;
+  color: var(--text);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.blossom-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.blossom-last-check {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.7;
+  margin-left: auto;
+}
+
+.blossom-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #ef4444;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.blossom-info {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #22c55e;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.blossom-add {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.blossom-add h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.blossom-add-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.blossom-add-row input {
+  flex: 1;
+  min-width: 180px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 13px;
+  font: inherit;
+}
+
+.blossom-hint {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.7;
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+
+.blossom-server-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.blossom-server {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+
+.blossom-server.untrusted {
+  opacity: 0.6;
+}
+
+.blossom-server.unhealthy {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.blossom-server-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.blossom-server-status {
+  flex-shrink: 0;
+}
+
+.blossom-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.blossom-dot[data-healthy='false'] {
+  background: #ef4444;
+}
+
+.blossom-dot[data-trusted='false'] {
+  background: #6b7280;
+}
+
+.blossom-server-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.blossom-server-name {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.blossom-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--border);
+  color: var(--text);
+  text-transform: uppercase;
+  font-weight: 400;
+}
+
+.blossom-tag.custom {
+  background: rgba(170, 59, 255, 0.2);
+  color: var(--accent);
+}
+
+.blossom-server-url {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.8;
+  word-break: break-all;
+  margin-top: 2px;
+}
+
+.blossom-server-meta {
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.6;
+  margin-top: 4px;
+}
+
+.blossom-server-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.blossom-trust-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.blossom-trust-toggle input {
+  margin: 0;
+}
+
+.blossom-server-actions .text-btn.danger {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.blossom-server-actions .text-btn.danger:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+}
