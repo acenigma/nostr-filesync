@@ -11,6 +11,7 @@ import Unlock from './components/Unlock';
 import InstallPrompt from './components/InstallPrompt';
 import OnlineIndicator from './components/OnlineIndicator';
 import MobileResourceIndicator from './components/MobileResourceIndicator';
+import { AppShell } from './components/AppShell';
 import { useTheme } from './hooks/useTheme';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useT } from './hooks/useT';
@@ -37,7 +38,8 @@ function App() {
   const [globalProgress, setGlobalProgress] = useState<{ pct: number; label: string } | null>(null);
   const [showInstall, setShowInstall] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { theme, toggle: toggleTheme } = useTheme();
+  const [search, setSearch] = useState('');
+  const { toggle: toggleTheme } = useTheme();
   const { t } = useT();
   const { installable, installed } = usePWAInstall();
   const viewRef = useRef<HTMLDivElement | null>(null);
@@ -138,8 +140,60 @@ function App() {
     return <Unlock />;
   }
 
+  const navItems = [
+    {
+      id: 'sync',
+      label: t('nav_files') || 'Arquivos',
+      icon: '📁',
+      active: view === 'sync',
+      onClick: () => setView('sync'),
+    },
+    {
+      id: 'todo',
+      label: t('nav_tasks') || 'Tarefas',
+      icon: '📝',
+      active: view === 'todo',
+      onClick: () => setView('todo'),
+    },
+  ];
+
+  const bottomTabs = [
+    {
+      id: 'sync',
+      label: t('nav_files') || 'Arquivos',
+      icon: '📁',
+      active: view === 'sync',
+      onClick: () => setView('sync'),
+    },
+    {
+      id: 'todo',
+      label: t('nav_tasks') || 'Tarefas',
+      icon: '📝',
+      active: view === 'todo',
+      onClick: () => setView('todo'),
+    },
+  ];
+
+  const handleUpload = () => {
+    const input = viewRef.current?.querySelector<HTMLInputElement>('.file-input');
+    input?.click();
+  };
+
   return (
-    <div className="app">
+    <AppShell
+      navItems={navItems}
+      bottomTabs={bottomTabs}
+      userNpub={npub}
+      unreadCount={unreadCount}
+      searchValue={search}
+      onSearch={setSearch}
+      onUpload={handleUpload}
+      onNotifications={() => setShowNotif(true)}
+      onSettings={() => setShowSettings(true)}
+      onThemeToggle={toggleTheme}
+      onMenu={() => {}}
+      onFab={handleUpload}
+    >
       {globalProgress && (
         <div
           className="global-progress"
@@ -152,64 +206,11 @@ function App() {
           <div className="global-progress-fill" style={{ width: `${globalProgress.pct}%` }} />
         </div>
       )}
-      <nav className="top-nav">
-        <button
-          className={`nav-btn ${view === 'sync' ? 'active' : ''}`}
-          onClick={() => setView('sync')}
-        >
-          {t('nav_files')}
-        </button>
-        <button
-          className={`nav-btn ${view === 'todo' ? 'active' : ''}`}
-          onClick={() => setView('todo')}
-        >
-          {t('nav_tasks')}
-        </button>
-        <div className="nav-spacer" />
-        <button
-          className="nav-icon-btn nav-bell-btn"
-          onClick={() => setShowNotif(true)}
-          title="Notificações"
-          aria-label="Notificações"
-        >
-          🔔
-          {unreadCount > 0 && <span className="nav-bell-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
-        </button>
-        {installable && !installed && (
-          <button
-            className="nav-icon-btn"
-            onClick={() => setShowInstall(true)}
-            title="Instalar app"
-            aria-label="Instalar app"
-          >
-            📲
-          </button>
-        )}
-        <button
-          className="nav-icon-btn"
-          onClick={toggleTheme}
-          title={theme === 'dark' ? t('theme_dark_to') : t('theme_light_to')}
-          aria-label={theme === 'dark' ? t('theme_dark_to') : t('theme_light_to')}
-        >
-          {theme === 'dark' ? '☀' : '☾'}
-        </button>
-        <button
-          className="nav-icon-btn"
-          onClick={() => setShowSettings(true)}
-          title={t('settings_title')}
-          aria-label={t('settings_title')}
-        >
-          ⚙
-        </button>
-      </nav>
-      <div className="app-npub" title={npub}>
-        {npub.slice(0, 12)}…{npub.slice(-6)}
-      </div>
       <OnlineIndicator />
       <MobileResourceIndicator />
       <div ref={viewRef} className="view-root">
         <Suspense fallback={<div className="view-loading">Carregando...</div>}>
-          <ViewSlot view={view} onProgress={setGlobalProgress} />
+          <ViewSlot view={view} onProgress={setGlobalProgress} search={search} />
         </Suspense>
       </div>
       {showSettings && (
@@ -230,18 +231,19 @@ function App() {
           }}
         />
       )}
-    </div>
+    </AppShell>
   );
 }
 
 interface ViewSlotProps {
   view: View;
   onProgress: (p: { pct: number; label: string } | null) => void;
+  search: string;
 }
 
-function ViewSlot({ view, onProgress }: ViewSlotProps) {
+function ViewSlot({ view, onProgress, search }: ViewSlotProps) {
   if (view === 'sync') {
-    return <FileSync onProgress={onProgress} />;
+    return <FileSync onProgress={onProgress} search={search} />;
   }
   return <TodoList />;
 }

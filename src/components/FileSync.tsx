@@ -20,9 +20,10 @@ interface FolderNode {
 
 interface FileSyncProps {
   onProgress?: (p: { pct: number; label: string } | null) => void;
+  search?: string;
 }
 
-export default function FileSync({ onProgress }: FileSyncProps = {}) {
+export default function FileSync({ onProgress, search = '' }: FileSyncProps = {}) {
   const {
     files,
     loading,
@@ -40,7 +41,11 @@ export default function FileSync({ onProgress }: FileSyncProps = {}) {
   } = useFileSync({ onProgress });
   const { t } = useT();
 
-  const [search, setSearch] = useState('');
+  const [internalSearch, setInternalSearch] = useState('');
+  const activeSearch = search ?? internalSearch;
+  const setActiveSearch = (v: string) => {
+    setInternalSearch(v);
+  };
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set(['']));
   const [uploadPath, setUploadPath] = useState('');
@@ -117,14 +122,14 @@ export default function FileSync({ onProgress }: FileSyncProps = {}) {
   };
 
   const filteredFiles = useMemo(() => {
-    if (!search.trim()) return files;
-    const q = search.toLowerCase();
+    if (!activeSearch.trim()) return files;
+    const q = activeSearch.toLowerCase();
     return files.filter(
       (f) =>
         f.name.toLowerCase().includes(q) ||
         (f.path || '').toLowerCase().includes(q)
     );
-  }, [files, search]);
+  }, [files, activeSearch]);
 
   const tree = useMemo(() => buildTree(filteredFiles), [filteredFiles]);
 
@@ -173,6 +178,7 @@ export default function FileSync({ onProgress }: FileSyncProps = {}) {
             <input
               type="file"
               multiple
+              className="file-input"
               onChange={onInputChange}
               style={{ display: 'none' }}
               data-testid="file-input"
@@ -261,8 +267,8 @@ export default function FileSync({ onProgress }: FileSyncProps = {}) {
         <input
           type="text"
           className="search-input"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={activeSearch}
+          onChange={(e) => setActiveSearch(e.target.value)}
           placeholder={t('search_placeholder')}
         />
         <div className="view-toggle">
